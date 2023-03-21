@@ -48,6 +48,7 @@ import PyOpenColorIO as OCIO
 
 import AllocationTransformTest
 import BakerTest
+import BuiltinConfigRegistryTest
 import BuiltinTransformRegistryTest
 import BuiltinTransformTest
 import CDLTransformTest
@@ -83,6 +84,7 @@ import Lut3DTransformTest
 import MatrixTransformTest
 import MixingHelpersTest
 import NamedTransformTest
+import OCIOZArchiveTest
 import OpenColorIOTest
 import ProcessorTest
 import RangeTransformTest
@@ -103,6 +105,7 @@ def suite():
 
     suite.addTest(loader.loadTestsFromModule(AllocationTransformTest))
     suite.addTest(loader.loadTestsFromModule(BakerTest))
+    suite.addTest(loader.loadTestsFromModule(BuiltinConfigRegistryTest))
     suite.addTest(loader.loadTestsFromModule(BuiltinTransformRegistryTest))
     suite.addTest(loader.loadTestsFromModule(BuiltinTransformTest))
     suite.addTest(loader.loadTestsFromModule(CDLTransformTest))
@@ -138,6 +141,7 @@ def suite():
     suite.addTest(loader.loadTestsFromModule(MatrixTransformTest))
     suite.addTest(loader.loadTestsFromModule(MixingHelpersTest))
     suite.addTest(loader.loadTestsFromModule(NamedTransformTest))
+    suite.addTest(loader.loadTestsFromModule(OCIOZArchiveTest))
     suite.addTest(loader.loadTestsFromModule(OpenColorIOTest))
     suite.addTest(loader.loadTestsFromModule(ProcessorTest))
     suite.addTest(loader.loadTestsFromModule(RangeTransformTest))

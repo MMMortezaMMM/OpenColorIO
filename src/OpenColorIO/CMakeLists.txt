@@ -8,7 +8,11 @@ set(SOURCES
     apphelpers/LegacyViewingPipeline.cpp
     apphelpers/MixingHelpers.cpp
     Baker.cpp
+    BakingUtils.cpp
     BitDepthUtils.cpp
+    builtinconfigs/BuiltinConfigRegistry.cpp
+    builtinconfigs/CGConfig.cpp
+    builtinconfigs/StudioConfig.cpp
     Caching.cpp
     ColorSpace.cpp
     ColorSpaceSet.cpp
@@ -63,9 +67,9 @@ set(SOURCES
     Look.cpp
     LookParse.cpp
     MathUtils.cpp
-    md5/md5.cpp
     NamedTransform.cpp
     OCIOYaml.cpp
+    OCIOZArchive.cpp
     Op.cpp
     OpOptimizers.cpp
     ops/allocation/AllocationOp.cpp
@@ -170,17 +174,29 @@ set(SOURCES
     SystemMonitor.cpp
 )
 
-if(NOT WIN32)
+# Install the pkg-config file.
 
-    # Install the pkg-config file.
+set(prefix ${CMAKE_INSTALL_PREFIX})
+set(exec_prefix "\${prefix}")
 
-    set(prefix ${CMAKE_INSTALL_PREFIX})
-    set(exec_prefix "\${prefix}")
+# CMAKE_INSTALL_LIBDIR is not guaranteed to be relative.
+# Not using cmake_path function since it is only available from CMake ≥ 3.20.
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+    set(libdir "${CMAKE_INSTALL_LIBDIR}")
+else()
     set(libdir "\${exec_prefix}/${CMAKE_INSTALL_LIBDIR}")
-    set(includedir "\${exec_prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
-    configure_file(res/OpenColorIO.pc.in ${CMAKE_CURRENT_BINARY_DIR}/OpenColorIO.pc @ONLY)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/OpenColorIO.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 endif()
+
+# CMAKE_INSTALL_INCLUDEDIR is not guaranteed to be relative.
+# Not using cmake_path function since it is only available from CMake ≥ 3.20.
+if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
+    set(includedir "${CMAKE_INSTALL_INCLUDEDIR}")
+else()
+    set(includedir "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
+
+configure_file(res/OpenColorIO.pc.in ${CMAKE_CURRENT_BINARY_DIR}/OpenColorIO.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/OpenColorIO.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
 add_library(OpenColorIO ${SOURCES})
 
@@ -208,6 +224,46 @@ set(ABI_HEADER_LOCATION "${CMAKE_BINARY_DIR}/include/OpenColorIO")
 list(APPEND INSTALL_HEADERS ${ABI_HEADER_LOCATION}/OpenColorABI.h)
 configure_file("${HEADER_LOCATION}/OpenColorABI.h.in" "${ABI_HEADER_LOCATION}/OpenColorABI.h" @ONLY)
 
+# Built-in configs
+set(CONFIGS_HEADER_LOCATION "${CMAKE_BINARY_DIR}/generated_include")
+file(GLOB CONFIGS_PATHS "builtinconfigs/configs/*.ocio")
+# Loop through the .ocio config files.
+foreach(C ${CONFIGS_PATHS})
+    get_filename_component(CONFIG_FULLNAME "${C}" NAME)
+    string(REGEX MATCH "^(.*)\\.ocio$" tempvar ${CONFIG_FULLNAME})
+    set(CONFIG_NAME ${CMAKE_MATCH_1})
+    list(APPEND CONFIGS_ALL ${CONFIG_NAME})
+
+    file(READ builtinconfigs/configs/${CONFIG_FULLNAME} HEX_CONTENTS HEX)
+    # Separate into individual bytes.
+    string(REGEX MATCHALL "([A-Za-z0-9][A-Za-z0-9])" SEPARATED_HEX "${HEX_CONTENTS}")
+
+    # Prepend the "0x" to each byte.
+    list(JOIN SEPARATED_HEX ",0x" FORMATTED_HEX)
+
+    # Prepend "0x" to the first byte.
+    string(PREPEND FORMATTED_HEX "0x")
+
+    # Append 0x00 to null-terminated the string.
+    string(APPEND FORMATTED_HEX ",0x00")
+    
+    # Set the dynamically named variable "${CONFIG_NAME}" to the config in HEX.
+    set(${CONFIG_NAME} ${FORMATTED_HEX})
+endforeach()
+
+file(GLOB TEMPLATE_HEADER_CONFIG_FILES "builtinconfigs/*.cpp.in")
+foreach(C ${TEMPLATE_HEADER_CONFIG_FILES})
+    get_filename_component(TEMPLATE_HEADER_FULLNAME "${C}" NAME)
+
+    string(LENGTH ${TEMPLATE_HEADER_FULLNAME} TEMPLATE_HEADER_LENGTH)
+    MATH(EXPR TEMPLATE_HEADER_LENGTH "${TEMPLATE_HEADER_LENGTH}-3")
+    # Get TEMPLATE_HEADER_FULLNAME without .in extension.
+    string(SUBSTRING ${TEMPLATE_HEADER_FULLNAME} 0 ${TEMPLATE_HEADER_LENGTH} TEMPLATE_HEADER_FULLNAME_H)
+
+    configure_file(builtinconfigs/${TEMPLATE_HEADER_FULLNAME} ${CONFIGS_HEADER_LOCATION}/${TEMPLATE_HEADER_FULLNAME_H} @ONLY)
+endforeach()
+
+
 set(BUILD_INCLUDES
     ${HEADER_LOCATION}/..
     ${HEADER_LOCATION}
@@ -219,17 +275,21 @@ target_include_directories(OpenColorIO
     PUBLIC
         "$<BUILD_INTERFACE:${BUILD_INCLUDES}>"
         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+    PRIVATE
+        "${CONFIGS_HEADER_LOCATION}"
 )
 
 target_link_libraries(OpenColorIO
     PRIVATE
         expat::expat
-        ${OCIO_HALF_LIB}
+        Imath::Imath
         pystring::pystring
-        sampleicc::sampleicc
-        utils::from_chars
-        utils::strings
+        "$<BUILD_INTERFACE:sampleicc::sampleicc>"
+        "$<BUILD_INTERFACE:utils::from_chars>"
+        "$<BUILD_INTERFACE:utils::strings>"
+        "$<BUILD_INTERFACE:xxHash>"
         yaml-cpp
+        MINIZIP::minizip-ng
 )
 
 if(APPLE)
@@ -242,7 +302,7 @@ endif()
 
 if(NOT BUILD_SHARED_LIBS)
     target_compile_definitions(OpenColorIO
-        PRIVATE
+        PUBLIC
             OpenColorIO_SKIP_IMPORTS
     )
 else()
@@ -293,21 +353,53 @@ if(WIN32)
     endif()
 endif()
 
+set(CUSTOM_LINK_FLAGS ${PLATFORM_LINK_OPTIONS})
+
+if(UNIX AND NOT APPLE)
+    # Also hide all the symbols of dependent libraries to prevent clashes if
+    # an app using this project is linked against other versions of our
+    # dependencies.
+    set(CUSTOM_LINK_FLAGS "${CUSTOM_LINK_FLAGS};-Wl,--exclude-libs,ALL")
+elseif(APPLE)
+    if (expat_LIBRARY)
+        get_filename_component(_expat_LIBDIR "${expat_LIBRARY}" DIRECTORY)
+        # Add the path to CMake list of search paths for libraries.
+        list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-L${_expat_LIBDIR}")
+        # Hide the expat symbols.
+        list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-hidden-lexpat")
+    endif()
+
+
+    # Check for minizip first since our Findminizip module sets minizip-ng_LIBRARY.
+    if (minizip_LIBRARY)
+        get_filename_component(_minizip-ng_LIBDIR "${minizip_LIBRARY}" DIRECTORY)
+        set(_minizip-ng_NAME "minizip")
+    elseif(minizip-ng_LIBRARY)
+        get_filename_component(_minizip-ng_LIBDIR "${minizip-ng_LIBRARY}" DIRECTORY)
+        set(_minizip-ng_NAME "minizip-ng")        
+    endif()
+
+    if (_minizip-ng_LIBDIR)
+        # Add the path to CMake list of search paths for libraries.
+        list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-L${_minizip-ng_LIBDIR}")
+        # Hide the minizip-ng symbols.
+        list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-hidden-l${_minizip-ng_NAME}") 
+    endif()   
+
+    if (_OCIO_LINK_FLAGS_LIST_)
+        list(JOIN _OCIO_LINK_FLAGS_LIST_ ";" _OCIO_LINK_FLAGS_LIST_)
+        set(CUSTOM_LINK_FLAGS "${CUSTOM_LINK_FLAGS};${_OCIO_LINK_FLAGS_LIST_}")
+    endif()              
+endif()
+
 set_target_properties(OpenColorIO PROPERTIES
     OUTPUT_NAME   ${PROJECT_NAME}${OCIO_LIBNAME_SUFFIX}
-    COMPILE_FLAGS "${PLATFORM_COMPILE_FLAGS}"
+    COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
+    LINK_OPTIONS "${CUSTOM_LINK_FLAGS}"
     VERSION       ${OpenColorIO_VERSION}
     SOVERSION     ${SOVERSION}
     PUBLIC_HEADER "${INSTALL_HEADERS}"
 )
-
-if (UNIX AND NOT APPLE)
-    # Also hide all the symbols of dependent libraries to prevent clashes if
-    # an app using this project is linked against other versions of our
-    # dependencies.
-    set_property (TARGET OpenColorIO
-                  APPEND PROPERTY LINK_FLAGS "-Wl,--exclude-libs,ALL")
-endif ()
 
 if(MSVC AND BUILD_SHARED_LIBS)
     # Install the pdb file if any.

@@ -25,6 +25,15 @@
 ###############################################################################
 ### Try to find package ###
 
+# BUILD_TYPE_DEBUG variable is currently set in one of the OCIO's CMake files. 
+# Now that some OCIO's find module are installed with the library itself (with static build), 
+# a consumer app don't have access to the variables set by an OCIO's CMake files. Therefore, some 
+# OCIO's find modules must detect the build type by itselves.  
+set(BUILD_TYPE_DEBUG OFF)
+if(CMAKE_BUILD_TYPE MATCHES "[Dd][Ee][Bb][Uu][Gg]")
+   set(BUILD_TYPE_DEBUG ON)
+endif()
+
 if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
     set(_yaml-cpp_REQUIRED_VARS yaml-cpp_LIBRARY)
 
@@ -66,22 +75,21 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
 
         # Lib names to search for
         set(_yaml-cpp_LIB_NAMES yaml-cpp)
-        if(WIN32 AND BUILD_TYPE_DEBUG AND NOT MINGW)
-            # Prefer Debug lib names (Windows only)
+        if(BUILD_TYPE_DEBUG)
+            # Prefer Debug lib names.
             list(INSERT _yaml-cpp_LIB_NAMES 0 yaml-cppd)
         endif()
 
         if(yaml-cpp_STATIC_LIBRARY)
             # Prefer static lib names
-            if(WIN32 AND NOT MINGW)
-                set(_yaml-cpp_LIB_SUFFIX "md")
-            endif()
             set(_yaml-cpp_STATIC_LIB_NAMES 
-                "libyaml-cpp${_yaml-cpp_LIB_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-            if(WIN32 AND BUILD_TYPE_DEBUG AND NOT MINGW)
-                # Prefer static Debug lib names (Windows only)
+                "${CMAKE_STATIC_LIBRARY_PREFIX}yaml-cpp${CMAKE_STATIC_LIBRARY_SUFFIX}")
+            
+            # Starting from 0.7.0, all platforms uses the suffix "d" for debug.
+            # See https://github.com/jbeder/yaml-cpp/blob/master/CMakeLists.txt#L141
+            if(BUILD_TYPE_DEBUG)
                 list(INSERT _yaml-cpp_STATIC_LIB_NAMES 0
-                    "libyaml-cpp${_yaml-cpp_LIB_SUFFIX}d${CMAKE_STATIC_LIBRARY_SUFFIX}")
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}yaml-cppd${CMAKE_STATIC_LIBRARY_SUFFIX}")
             endif()
         endif()
 
@@ -91,7 +99,7 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
                 ${_yaml-cpp_STATIC_LIB_NAMES}
                 ${_yaml-cpp_LIB_NAMES}
             HINTS 
-                ${_yaml-cpp_ROOT}
+                ${yaml-cpp_ROOT}
                 ${PC_yaml-cpp_LIBRARY_DIRS}
             PATH_SUFFIXES 
                 lib64
@@ -130,7 +138,7 @@ endif()
 ###############################################################################
 ### Install package from source ###
 
-if(NOT yaml-cpp_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
+if(NOT yaml-cpp_FOUND AND OCIO_INSTALL_EXT_PACKAGES AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
     include(ExternalProject)
     include(GNUInstallDirs)
 
@@ -177,6 +185,10 @@ if(NOT yaml-cpp_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
             -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
             -DCMAKE_INSTALL_MESSAGE=${CMAKE_INSTALL_MESSAGE}
             -DCMAKE_INSTALL_PREFIX=${_EXT_DIST_ROOT}
+            -DCMAKE_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
+            -DCMAKE_INSTALL_DATADIR=${CMAKE_INSTALL_DATADIR}
+            -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+            -DCMAKE_INSTALL_INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
             -DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJECT_PATH_MAX}
             -DBUILD_SHARED_LIBS=OFF
             -DYAML_BUILD_SHARED_LIBS=OFF
@@ -191,16 +203,22 @@ if(NOT yaml-cpp_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
         endif()
 
         if(APPLE)
+            string(REPLACE ";" "$<SEMICOLON>" ESCAPED_CMAKE_OSX_ARCHITECTURES "${CMAKE_OSX_ARCHITECTURES}")
+
             set(yaml-cpp_CMAKE_ARGS
-                ${yaml-cpp_CMAKE_ARGS} -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET})
+                ${yaml-cpp_CMAKE_ARGS}
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
+                -DCMAKE_OSX_ARCHITECTURES=${ESCAPED_CMAKE_OSX_ARCHITECTURES}
+            )
         endif()
 
-        if(NOT BUILD_SHARED_LIBS)
-            #TODO: Find a way to merge in the static libs when built with internal yamlcpp
-            message(WARNING
-                "Building STATIC libOpenColorIO using the in-built yaml-cpp. "
-                "yaml-cpp symbols are NOT included in the output binary!"
-            )
+
+        if (ANDROID)
+            set(yaml-cpp_CMAKE_ARGS
+                ${yaml-cpp_CMAKE_ARGS}
+                -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+                -DANDROID_ABI=${ANDROID_ABI}
+                -DANDROID_STL=${ANDROID_STL})
         endif()
 
         set(yaml-cpp_GIT_TAG "yaml-cpp-${yaml-cpp_VERSION}")

@@ -37,19 +37,20 @@ set_target_properties(oglapphelpers PROPERTIES OUTPUT_NAME OpenColorIOoglapphelp
 
 if(NOT BUILD_SHARED_LIBS)
     target_compile_definitions(oglapphelpers
-        PRIVATE
+        PUBLIC
             OpenColorIO_SKIP_IMPORTS
     )
 endif()
 
-set(CUSTOM_COMPILE_FLAGS ${PLATFORM_COMPILE_FLAGS})
+set(CUSTOM_COMPILE_FLAGS ${PLATFORM_COMPILE_OPTIONS})
 if(APPLE)
     # Mute the deprecated warning for some GLUT methods.
-    set(CUSTOM_COMPILE_FLAGS "${CUSTOM_COMPILE_FLAGS} -DGL_SILENCE_DEPRECATION")
+    set(CUSTOM_COMPILE_FLAGS "${CUSTOM_COMPILE_FLAGS};-DGL_SILENCE_DEPRECATION")
 endif()
 
 set_target_properties(oglapphelpers PROPERTIES 
-    COMPILE_FLAGS "${CUSTOM_COMPILE_FLAGS}"
+    COMPILE_OPTIONS "${CUSTOM_COMPILE_FLAGS}"
+    LINK_OPTIONS "${PLATFORM_LINK_OPTIONS}"
 )
 
 target_include_directories(oglapphelpers

@@ -102,6 +102,46 @@ inline bool EqualWithSafeRelError(T value,
 #   define U8(x) u8##x
 #endif
 
+struct EnvironmentVariableGuard
+{
+    EnvironmentVariableGuard(const std::string & name, const std::string & value) : m_name(name)
+    {
+        if (!name.empty())
+        {
+            Platform::Setenv(name.c_str(), value);
+        }
+    }
+
+    EnvironmentVariableGuard(const std::string & name) : m_name(name)
+    {
+    }
+
+    ~EnvironmentVariableGuard()
+    {
+        if (!m_name.empty())
+        {
+            Platform::Unsetenv(m_name.c_str());
+        }
+    }
+
+    const std::string m_name;
+};
+
+/**
+ * \brief Create a Temporary Directory
+ * 
+ * \param name Name of the directory
+ * \return Full path to the directory
+ */
+std::string CreateTemporaryDirectory(const std::string & name);
+
+/**
+ * \brief Remove the directory specified in the path.
+ * 
+ * \param directoryPath Path to the directory
+ */
+void RemoveTemporaryDirectory(const std::string & directoryPath);
+
 }
 // namespace OCIO_NAMESPACE
 

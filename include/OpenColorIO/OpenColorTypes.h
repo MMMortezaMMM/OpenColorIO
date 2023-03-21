@@ -114,6 +114,10 @@ class OCIOEXPORT GradingRGBCurve;
 typedef OCIO_SHARED_PTR<const GradingRGBCurve> ConstGradingRGBCurveRcPtr;
 typedef OCIO_SHARED_PTR<GradingRGBCurve> GradingRGBCurveRcPtr;
 
+class OCIOEXPORT ConfigIOProxy;
+typedef OCIO_SHARED_PTR<const ConfigIOProxy> ConstConfigIOProxyRcPtr;
+typedef OCIO_SHARED_PTR<ConfigIOProxy> ConfigIOProxyRcPtr;
+
 typedef std::array<float, 3> Float3;
 
 
@@ -452,11 +456,12 @@ enum GpuLanguage
     GPU_LANGUAGE_MSL_2_0            ///< Metal Shading Language
 };
 
+/// Controls which environment variables are loaded into a Context object.
 enum EnvironmentMode
 {
     ENV_ENVIRONMENT_UNKNOWN = 0,
-    ENV_ENVIRONMENT_LOAD_PREDEFINED,
-    ENV_ENVIRONMENT_LOAD_ALL
+    ENV_ENVIRONMENT_LOAD_PREDEFINED, ///< Only load vars in the config's environment section
+    ENV_ENVIRONMENT_LOAD_ALL         ///< Load all env. vars (note: may reduce performance)
 };
 
 /// A RangeTransform may be set to clamp the values, or not.
@@ -959,6 +964,13 @@ extern OCIOEXPORT const char * OCIO_DISABLE_PROCESSOR_CACHES;
 extern OCIOEXPORT const char * OCIO_DISABLE_CACHE_FALLBACK;
 
 /** @}*/
+
+
+// Archive config feature
+// Default filename (with extension) of an config.
+extern OCIOEXPORT const char * OCIO_CONFIG_DEFAULT_NAME;
+extern OCIOEXPORT const char * OCIO_CONFIG_DEFAULT_FILE_EXT;
+extern OCIOEXPORT const char * OCIO_CONFIG_ARCHIVE_FILE_EXT;
 
 } // namespace OCIO_NAMESPACE
 

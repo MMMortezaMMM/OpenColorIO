@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright Contributors to the OpenColorIO Project.
 
+import copy
 import unittest
 import os
 import sys
@@ -10,6 +11,7 @@ from UnitTestUtils import SIMPLE_CONFIG, TEST_NAMES, TEST_DESCS, TEST_CATEGORIES
 
 
 class ColorSpaceTest(unittest.TestCase):
+
     def setUp(self):
         self.colorspace = OCIO.ColorSpace()
         self.log_tr = OCIO.LogTransform(10)
@@ -17,6 +19,42 @@ class ColorSpaceTest(unittest.TestCase):
     def tearDown(self):
         self.colorspace = None
         self.log_tr = None
+
+    def test_copy(self):
+        """
+        Test the deepcopy() method.
+        """
+        self.colorspace.setName('colorspace1')
+        self.colorspace.setFamily('family')
+        self.colorspace.setEqualityGroup('group')
+        self.colorspace.setDescription('description')
+        self.colorspace.setBitDepth(OCIO.BIT_DEPTH_UINT8)
+        self.colorspace.setEncoding('encoding')
+        self.colorspace.setIsData(False)
+        self.colorspace.setAllocation(OCIO.ALLOCATION_LG2)
+        self.colorspace.setAllocationVars([-8, 5, 0.00390625])
+        mat = OCIO.MatrixTransform()
+        self.colorspace.setTransform(mat, OCIO.COLORSPACE_DIR_TO_REFERENCE)
+        self.colorspace.setTransform(direction=OCIO.COLORSPACE_DIR_FROM_REFERENCE, transform=mat)
+        self.colorspace.addAlias('alias')
+        self.colorspace.addCategory('cat')
+
+        other = copy.deepcopy(self.colorspace)
+        self.assertFalse(other is self.colorspace)
+
+        self.assertEqual(other.getName(), self.colorspace.getName())
+        self.assertEqual(other.getFamily(), self.colorspace.getFamily())
+        self.assertEqual(other.getEqualityGroup(), self.colorspace.getEqualityGroup())
+        self.assertEqual(other.getDescription(), self.colorspace.getDescription())
+        self.assertEqual(other.getBitDepth(), self.colorspace.getBitDepth())
+        self.assertEqual(other.getEncoding(), self.colorspace.getEncoding())
+        self.assertEqual(other.isData(), self.colorspace.isData())
+        self.assertEqual(other.getAllocation(), self.colorspace.getAllocation())
+        self.assertEqual(other.getAllocationVars(), self.colorspace.getAllocationVars())
+        self.assertTrue(other.getTransform(OCIO.COLORSPACE_DIR_TO_REFERENCE).equals(self.colorspace.getTransform(OCIO.COLORSPACE_DIR_TO_REFERENCE)))
+        self.assertTrue(other.getTransform(OCIO.COLORSPACE_DIR_FROM_REFERENCE).equals(self.colorspace.getTransform(OCIO.COLORSPACE_DIR_FROM_REFERENCE)))
+        self.assertEqual(list(other.getAliases()), list(self.colorspace.getAliases()))
+        self.assertEqual(list(other.getCategories()), list(self.colorspace.getCategories()))
 
     def test_allocation(self):
         """
@@ -369,3 +407,351 @@ class ColorSpaceTest(unittest.TestCase):
         cs.clearAliases()
         aliases = cs.getAliases()
         self.assertEqual(len(aliases), 0)
+
+    def test_is_colorspace_linear(self):
+        """
+        Test isColorSpaceLinear.
+        """
+        SIMPLE_PROFILE = """ocio_profile_version: 2
+
+description: Test config for the isColorSpaceLinear method.
+
+environment:
+  {}
+search_path: "non_existing_path"
+roles:
+  aces_interchange: scene_linear-trans
+  cie_xyz_d65_interchange: display_linear-enc
+  color_timing: scene_linear-trans
+  compositing_log: scene_log-enc
+  default: display_data
+  scene_linear: scene_linear-trans
+
+displays:
+  generic display:
+    - !<View> {name: Raw, colorspace: scene_data}
+
+# Make a few of the color spaces inactive, this should not affect the result.
+inactive_colorspaces: [display_linear-trans, scene_linear-trans]
+
+view_transforms:
+  - !<ViewTransform>
+    name: view_transform
+    from_scene_reference: !<MatrixTransform> {}
+
+# Display-referred color spaces.
+
+display_colorspaces:
+  - !<ColorSpace>
+    name: display_data
+    description: |
+      Data space.
+      Has a linear transform, which should never happen, but this will be ignored since 
+      isdata is true.
+    isdata: true
+    encoding: data
+    from_display_reference: !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+
+  - !<ColorSpace>
+    name: display_linear-enc
+    description: |
+      Encoding set to display-linear.
+      Has a non-existent transform, but this should be ignored since the encoding takes precedence.
+    isdata: false
+    encoding: display-linear
+    from_display_reference: !<FileTransform> {src: does-not-exist.lut}
+
+  - !<ColorSpace>
+    name: display_wrong-linear-enc
+    description: |
+      Encoding set to scene-linear.  This should never happen for a display space, but test it.
+    isdata: false
+    encoding: scene-linear
+
+  - !<ColorSpace>
+    name: display_video-enc
+    description: |
+      Encoding set to sdr-video.
+      Has a linear transform, but this should be ignored since the encoding takes precedence.
+    isdata: false
+    encoding: sdr-video
+    from_display_reference: !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+
+  - !<ColorSpace>
+    name: display_linear-trans
+    description: |
+      No encoding.  Transform is linear.
+    isdata: false
+    from_display_reference: !<GroupTransform>
+      children:
+        - !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+        - !<CDLTransform> {slope: [0.1, 2, 3], style: noclamp}
+
+  - !<ColorSpace>
+    name: display_video-trans
+    description: |
+      No encoding.  Transform is non-linear.
+    isdata: false
+    from_display_reference: !<BuiltinTransform> {style: DISPLAY - CIE-XYZ-D65_to_sRGB}
+
+# Scene-referred color spaces.
+
+colorspaces:
+  - !<ColorSpace>
+    name: scene_data
+    description: |
+      Data space.
+      Has a linear transform, which should never happen, but this will be ignored 
+      since isdata is true.
+    isdata: true
+    encoding: data
+    from_scene_reference: !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+
+  - !<ColorSpace>
+    name: scene_linear-enc
+    description: |
+      Encoding set to scene-linear.
+      Has a non-linear transform, but this will be ignored since the encoding takes precedence.
+    isdata: false
+    encoding: scene-linear
+    from_scene_reference: !<BuiltinTransform> {style: DISPLAY - CIE-XYZ-D65_to_sRGB}
+
+  - !<ColorSpace>
+    name: scene_wrong-linear-enc
+    description: |
+      Encoding set to display-linear.  This should never happen for a scene space, but test it.
+    isdata: false
+    encoding: display-linear
+
+  - !<ColorSpace>
+    name: scene_log-enc
+    description: |
+      Encoding set to log.
+      Has a linear transform, but this will be ignored since the encoding takes precedence.
+    isdata: false
+    encoding: log
+    from_scene_reference: !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+
+  - !<ColorSpace>
+    name: scene_linear-trans
+    aliases: [scene_linear-trans-alias]
+    description: |
+      No encoding.  Transform is linear.
+    isdata: false
+    to_scene_reference: !<GroupTransform>
+      children:
+        - !<BuiltinTransform> {style: UTILITY - ACES-AP0_to_CIE-XYZ-D65_BFD}
+        - !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+        - !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+
+  - !<ColorSpace>
+    name: scene_nonlin-trans
+    description: |
+      No encoding.  Transform is non-linear because it clamps values outside [0,1].
+    isdata: false
+    to_scene_reference: !<GroupTransform>
+      children:
+        - !<MatrixTransform> {matrix: [ 3.240969941905, -1.537383177570, -0.498610760293, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.055630079697, -0.203976958889, 1.056971514243, 0, 0, 0, 0, 1 ]}
+        - !<RangeTransform> {min_in_value: 0., min_out_value: 0., max_in_value: 1., max_out_value: 1.}
+
+  - !<ColorSpace>
+    name: scene_ref
+    description: |
+      No encoding.  Considered linear since it is equivalent to the reference space.
+    isdata: false
+"""  
+        # Create a config.
+        cfg = OCIO.Config.CreateFromStream(SIMPLE_PROFILE)
+
+        def test_scene_referred(self, cfg, cs_name, expected_value):
+            cs = cfg.getColorSpace(cs_name)
+            is_linear_to_scene_reference = cfg.isColorSpaceLinear(
+                cs_name, 
+                OCIO.REFERENCE_SPACE_SCENE
+            )
+            self.assertEqual(is_linear_to_scene_reference, expected_value)
+
+        def test_display_referred(self, cfg, cs_name, expected_value):
+            cs = cfg.getColorSpace(cs_name)
+            is_linear_to_display_reference = cfg.isColorSpaceLinear(
+                cs_name, 
+                OCIO.REFERENCE_SPACE_DISPLAY
+            )
+            self.assertEqual(is_linear_to_display_reference, expected_value)
+
+        # Test undefined color spaces.
+        with self.assertRaises(OCIO.Exception):
+            cfg.isColorSpaceLinear('colorspace_abc', OCIO.REFERENCE_SPACE_SCENE)
+        with self.assertRaises(OCIO.Exception):
+            cfg.isColorSpaceLinear('colorspace_abc', OCIO.REFERENCE_SPACE_DISPLAY)
+
+        # Test the scene referred color spaces.
+        test_scene_referred(self, cfg, "display_data", False)
+        test_scene_referred(self, cfg, "display_linear-enc", False)
+        test_scene_referred(self, cfg, "display_wrong-linear-enc", False)
+        test_scene_referred(self, cfg, "display_video-enc", False)
+        test_scene_referred(self, cfg, "display_linear-trans", False)
+        test_scene_referred(self, cfg, "display_video-trans", False)
+
+        test_scene_referred(self, cfg, "scene_data", False)
+        test_scene_referred(self, cfg, "scene_linear-enc", True)
+        test_scene_referred(self, cfg, "scene_wrong-linear-enc", False)
+        test_scene_referred(self, cfg, "scene_log-enc", False)
+        test_scene_referred(self, cfg, "scene_linear-trans", True)
+        test_scene_referred(self, cfg, "scene_nonlin-trans", False)
+        test_scene_referred(self, cfg, "scene_linear-trans-alias", True)
+        test_scene_referred(self, cfg, "scene_ref", True)
+
+        # Test the display referred color spaces.
+        test_display_referred(self, cfg, "display_data", False)
+        test_display_referred(self, cfg, "display_linear-enc", True)
+        test_display_referred(self, cfg, "display_wrong-linear-enc", False)
+        test_display_referred(self, cfg, "display_video-enc", False)
+        test_display_referred(self, cfg, "display_linear-trans", True)
+        test_display_referred(self, cfg, "display_video-trans", False)
+
+        test_display_referred(self, cfg, "scene_data", False)
+        test_display_referred(self, cfg, "scene_linear-enc", False)
+        test_display_referred(self, cfg, "scene_wrong-linear-enc", False)
+        test_display_referred(self, cfg, "scene_log-enc", False)
+        test_display_referred(self, cfg, "scene_linear-trans", False)
+        test_display_referred(self, cfg, "scene_nonlin-trans", False)
+        test_display_referred(self, cfg, "scene_linear-trans-alias", False)
+        test_display_referred(self, cfg, "scene_ref", False)
+        
+    def test_processor_to_known_colorspace(self):
+        
+        CONFIG = """ocio_profile_version: 2
+
+roles:
+  default: raw
+  scene_linear: ref_cs
+
+colorspaces:
+  - !<ColorSpace>
+    name: raw
+    description: A data colorspace (should not be used).
+    isdata: true
+
+  - !<ColorSpace>
+    name: ref_cs
+    description: The reference colorspace.
+    isdata: false
+
+  - !<ColorSpace>
+    name: not sRGB
+    description: A color space that misleadingly has sRGB in the name, even though it's not.
+    isdata: false
+    to_scene_reference: !<BuiltinTransform> {style: ACEScct_to_ACES2065-1}
+
+  - !<ColorSpace>
+    name: ACES cg
+    description: An ACEScg space with an unusual spelling.
+    isdata: false
+    to_scene_reference: !<BuiltinTransform> {style: ACEScg_to_ACES2065-1}
+
+  - !<ColorSpace>
+    name: Linear ITU-R BT.709
+    description: A linear Rec.709 space with an unusual spelling.
+    isdata: false
+    from_scene_reference: !<GroupTransform>
+      name: AP0 to Linear Rec.709 (sRGB)
+      children:
+        - !<MatrixTransform> {matrix: [2.52168618674388, -1.13413098823972, -0.387555198504164, 0, -0.276479914229922, 1.37271908766826, -0.096239173438334, 0, -0.0153780649660342, -0.152975335867399, 1.16835340083343, 0, 0, 0, 0, 1]}
+
+  - !<ColorSpace>
+    name: Texture -- sRGB
+    description: An sRGB Texture space, spelled differently than in the built-in config.
+    isdata: false
+    from_scene_reference: !<GroupTransform>
+      name: AP0 to sRGB Rec.709
+      children:
+        - !<MatrixTransform> {matrix: [2.52168618674388, -1.13413098823972, -0.387555198504164, 0, -0.276479914229922, 1.37271908766826, -0.096239173438334, 0, -0.0153780649660342, -0.152975335867399, 1.16835340083343, 0, 0, 0, 0, 1]}
+        - !<ExponentWithLinearTransform> {gamma: 2.4, offset: 0.055, direction: inverse}
+
+  - !<ColorSpace>
+    name: sRGB Encoded AP1 - Texture
+    description: Another space with "sRGB" in the name that is not actually an sRGB texture space.
+    isdata: false
+    from_scene_reference: !<GroupTransform>
+      name: AP0 to sRGB Encoded AP1 - Texture
+      children:
+        - !<MatrixTransform> {matrix: [1.45143931614567, -0.23651074689374, -0.214928569251925, 0, -0.0765537733960206, 1.17622969983357, -0.0996759264375522, 0, 0.00831614842569772, -0.00603244979102102, 0.997716301365323, 0, 0, 0, 0, 1]}
+        - !<ExponentWithLinearTransform> {gamma: 2.4, offset: 0.055, direction: inverse}
+
+"""
+        def check_processor(self, p):
+            gt = p.createGroupTransform()
+            self.assertEqual(len(gt), 4)
+
+            self.assertAlmostEqual(gt[0].getLogSideSlopeValue()[0], 0.0570776, places=6)
+            self.assertEqual(gt[0].getDirection(), OCIO.TRANSFORM_DIR_INVERSE)
+
+            self.assertAlmostEqual(gt[1].getMatrix()[0], 0.6954522413574519, places=6)
+            self.assertEqual(gt[1].getDirection(), OCIO.TRANSFORM_DIR_FORWARD)
+
+            self.assertAlmostEqual(gt[2].getMatrix()[0], 1.45143931607166, places=6)
+            self.assertEqual(gt[2].getDirection(), OCIO.TRANSFORM_DIR_FORWARD)
+
+            self.assertAlmostEqual(gt[3].getValue()[0], 2.2, places=6)
+            self.assertEqual(gt[3].getDirection(), OCIO.TRANSFORM_DIR_INVERSE)
+
+        def check_processor_inv(self, p):
+            gt = p.createGroupTransform()
+            self.assertEqual(len(gt), 4)
+
+            self.assertAlmostEqual(gt[0].getValue()[0], 2.2, places=6)
+            self.assertEqual(gt[0].getDirection(), OCIO.TRANSFORM_DIR_FORWARD)
+
+            self.assertAlmostEqual(gt[1].getMatrix()[0], 0.6954522413574519, places=6)
+            self.assertEqual(gt[1].getDirection(), OCIO.TRANSFORM_DIR_FORWARD)
+
+            self.assertAlmostEqual(gt[2].getMatrix()[0], 1.45143931607166, places=6)
+            self.assertEqual(gt[2].getDirection(), OCIO.TRANSFORM_DIR_FORWARD)
+
+            self.assertAlmostEqual(gt[3].getLogSideSlopeValue()[0], 0.0570776, places=6)
+            self.assertEqual(gt[3].getDirection(), OCIO.TRANSFORM_DIR_FORWARD)
+            cfg = OCIO.Config.CreateFromStream(CONFIG)
+
+        cfg = OCIO.Config.CreateFromStream(CONFIG)
+
+        # Make all color spaces suitable for the heuristics inactive.
+        # The heuristics don't look at inactive color spaces.
+        cfg.setInactiveColorSpaces("ACES cg, Linear ITU-R BT.709, Texture -- sRGB")
+
+        src_csname = "not sRGB"
+        builtin_csname = "Gamma 2.2 AP1 - Texture"
+
+        # Test throw if no suitable spaces are present.
+        with self.assertRaises(OCIO.Exception):
+            p = OCIO.Config.GetProcessorToBuiltinColorSpace(cfg, src_csname, builtin_csname)
+
+        # Test sRGB Texture space.
+        cfg.setInactiveColorSpaces("ACES cg, Linear ITU-R BT.709")
+        p = OCIO.Config.GetProcessorToBuiltinColorSpace(cfg, src_csname, builtin_csname)
+        check_processor(self, p)
+
+        # Test linear color space from_ref direction.
+        cfg.setInactiveColorSpaces("ACES cg, Texture -- sRGB")
+        p = OCIO.Config.GetProcessorToBuiltinColorSpace(cfg, src_csname, builtin_csname)
+        check_processor(self, p)
+
+        # Test linear color space to_ref direction.
+        cfg.setInactiveColorSpaces("Linear ITU-R BT.709, Texture -- sRGB")
+        p = OCIO.Config.GetProcessorToBuiltinColorSpace(cfg, src_csname, builtin_csname)
+        check_processor(self, p)
+
+        # Test sRGB Texture space.
+        cfg.setInactiveColorSpaces("ACES cg, Linear ITU-R BT.709")
+        p = OCIO.Config.GetProcessorFromBuiltinColorSpace(builtin_csname, cfg, src_csname)
+        check_processor_inv(self, p)
+
+        # Test linear color space from_ref direction.
+        cfg.setInactiveColorSpaces("ACES cg, Texture -- sRGB")
+        p = OCIO.Config.GetProcessorFromBuiltinColorSpace(builtin_csname, cfg, src_csname)
+        check_processor_inv(self, p)
+
+        # Test linear color space to_ref direction.
+        cfg.setInactiveColorSpaces("Linear ITU-R BT.709, Texture -- sRGB")
+        p = OCIO.Config.GetProcessorFromBuiltinColorSpace(builtin_csname, cfg, src_csname)
+        check_processor_inv(self, p)

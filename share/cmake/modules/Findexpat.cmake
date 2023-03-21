@@ -25,6 +25,15 @@
 ###############################################################################
 ### Try to find package ###
 
+# BUILD_TYPE_DEBUG variable is currently set in one of the OCIO's CMake files. 
+# Now that some OCIO's find module are installed with the library itself (with static build), 
+# a consumer app don't have access to the variables set by an OCIO's CMake files. Therefore, some 
+# OCIO's find modules must detect the build type by itselves. 
+set(BUILD_TYPE_DEBUG OFF)
+if(CMAKE_BUILD_TYPE MATCHES "[Dd][Ee][Bb][Uu][Gg]")
+   set(BUILD_TYPE_DEBUG ON)
+endif()
+
 if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
     set(_expat_REQUIRED_VARS expat_LIBRARY)
 
@@ -87,21 +96,58 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
                 expat/include
         )
 
+
+        # Expat uses prefix "lib" on all platform by default.
+        # Library name doesn't change in debug.
+
+        # For Windows, see https://github.com/libexpat/libexpat/blob/R_2_2_8/expat/win32/README.txt.
+        # libexpat<postfix=[w][d][MD|MT]>.lib
+        # The "w" indicates the UTF-16 version of the library.
+
         # Lib names to search for
-        set(_expat_LIB_NAMES expat libexpat)
+        set(_expat_LIB_NAMES libexpat expat)
+
         if(WIN32 AND BUILD_TYPE_DEBUG)
-            # Prefer Debug lib names (Windows only)
-            list(INSERT _expat_LIB_NAMES 0 expatd)
+            # Prefer Debug lib names. The library name changes only on Windows.
+            list(INSERT _expat_LIB_NAMES 0 libexpatd libexpatwd expatd expatwd)
+        elseif(WIN32)
+            # libexpat(w).dll/.lib
+            list(APPEND _expat_LIB_NAMES libexpatw expatw)
         endif()
 
         if(expat_STATIC_LIBRARY)
+            # Looking for both "lib" prefix and CMAKE_STATIC_LIBRARY_PREFIX.
             # Prefer static lib names
-            set(_expat_STATIC_LIB_NAMES 
+            set(_expat_STATIC_LIB_NAMES
+                "libexpat${CMAKE_STATIC_LIBRARY_SUFFIX}"
                 "${CMAKE_STATIC_LIBRARY_PREFIX}expat${CMAKE_STATIC_LIBRARY_SUFFIX}")
+
             if(WIN32 AND BUILD_TYPE_DEBUG)
-                # Prefer static Debug lib names (Windows only)
+                # Prefer static Debug lib names. The library name changes only on Windows.
                 list(INSERT _expat_STATIC_LIB_NAMES 0
-                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatd${CMAKE_STATIC_LIBRARY_SUFFIX}")
+                    "libexpatdMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "libexpatdMT${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "libexpatd${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    "libexpatwdMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "libexpatwdMT${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "libexpatwd${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatdMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatdMT${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatd${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatwdMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatwdMT${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatwd${CMAKE_STATIC_LIBRARY_SUFFIX}")
+            elseif (WIN32)
+                list(INSERT _expat_STATIC_LIB_NAMES 0
+                    "libexpatMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "libexpatMT${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    "libexpatwMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "libexpatwMT${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatMT${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatwMD${CMAKE_STATIC_LIBRARY_SUFFIX}" 
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}expatwMT${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                    )
             endif()
         endif()
 
@@ -162,7 +208,7 @@ endif()
 ###############################################################################
 ### Install package from source ###
 
-if(NOT expat_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
+if(NOT expat_FOUND AND OCIO_INSTALL_EXT_PACKAGES AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
     include(ExternalProject)
     include(GNUInstallDirs)
 
@@ -213,6 +259,10 @@ if(NOT expat_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
             -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
             -DCMAKE_INSTALL_MESSAGE=${CMAKE_INSTALL_MESSAGE}
             -DCMAKE_INSTALL_PREFIX=${_EXT_DIST_ROOT}
+            -DCMAKE_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
+            -DCMAKE_INSTALL_DATADIR=${CMAKE_INSTALL_DATADIR}
+            -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+            -DCMAKE_INSTALL_INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
             -DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJECT_PATH_MAX}
             -DEXPAT_BUILD_DOCS=OFF
             -DEXPAT_BUILD_EXAMPLES=OFF
@@ -227,8 +277,21 @@ if(NOT expat_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
         endif()
 
         if(APPLE)
+            string(REPLACE ";" "$<SEMICOLON>" ESCAPED_CMAKE_OSX_ARCHITECTURES "${CMAKE_OSX_ARCHITECTURES}")
+
             set(EXPAT_CMAKE_ARGS
-                ${EXPAT_CMAKE_ARGS} -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET})
+                ${EXPAT_CMAKE_ARGS}
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
+                -DCMAKE_OSX_ARCHITECTURES=${ESCAPED_CMAKE_OSX_ARCHITECTURES}
+            )
+        endif()
+
+        if (ANDROID)
+            set(EXPAT_CMAKE_ARGS
+                ${EXPAT_CMAKE_ARGS}
+                -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+                -DANDROID_ABI=${ANDROID_ABI}
+                -DANDROID_STL=${ANDROID_STL})
         endif()
 
         # Hack to let imported target be built from ExternalProject_Add

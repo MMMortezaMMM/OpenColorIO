@@ -14,23 +14,24 @@ set(SOURCES
 
 add_executable(ocioconvert ${SOURCES})
 
-if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(ocioconvert
-        PRIVATE
-            OpenColorIO_SKIP_IMPORTS
-    )
-endif()
+set_target_properties(ocioconvert PROPERTIES
+    COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
+    LINK_OPTIONS "${PLATFORM_LINK_OPTIONS}"
+)
 
-set_target_properties(ocioconvert PROPERTIES 
-    COMPILE_FLAGS "${PLATFORM_COMPILE_FLAGS}")
+if (USE_MSVC)
+	# Temporary until fixed in OpenImageIO: Mute some warnings from OpenImageIO farmhash.h
+	# C4267 (level 3)	    'var' : conversion from 'size_t' to 'type', possible loss of data
+	# C4244	(level 3 & 4)	'conversion' conversion from 'type1' to 'type2', possible loss of data
+    target_compile_options(ocioconvert PRIVATE /wd4267 /wd4244)
+endif()
 
 target_link_libraries(ocioconvert
     PRIVATE
-        apputils
         ${OCIO_GL_LIB}
-        oiiohelpers
+        apputils
+        imageioapphelpers
         OpenColorIO
-        OpenImageIO::OpenImageIO
 )
 
 install(TARGETS ocioconvert

@@ -97,7 +97,7 @@ endif()
 ###############################################################################
 ### Install package from source ###
 
-if(NOT lcms2_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
+if(NOT lcms2_FOUND AND OCIO_INSTALL_EXT_PACKAGES AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
     include(ExternalProject)
 
     set(_EXT_DIST_ROOT "${CMAKE_BINARY_DIR}/ext/dist")
@@ -106,9 +106,9 @@ if(NOT lcms2_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
     # Set find_package standard args
     set(lcms2_FOUND TRUE)
     set(lcms2_VERSION ${lcms2_FIND_VERSION})
-    set(lcms2_INCLUDE_DIR "${_EXT_DIST_ROOT}/include/lcms2")
+    set(lcms2_INCLUDE_DIR "${_EXT_DIST_ROOT}/${CMAKE_INSTALL_INCLUDEDIR}/lcms2")
     set(lcms2_LIBRARY 
-        "${_EXT_DIST_ROOT}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}lcms2${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        "${_EXT_DIST_ROOT}/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}lcms2${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
     if(_lcms2_TARGET_CREATE)
         if(UNIX)
@@ -136,6 +136,9 @@ if(NOT lcms2_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
             -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
             -DCMAKE_INSTALL_MESSAGE=${CMAKE_INSTALL_MESSAGE}
             -DCMAKE_INSTALL_PREFIX=${_EXT_DIST_ROOT}
+            -DCMAKE_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
+            -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+            -DCMAKE_INSTALL_INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
             -DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJECT_PATH_MAX}
             -DBUILD_SHARED_LIBS=OFF
         )
@@ -146,8 +149,21 @@ if(NOT lcms2_FOUND AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
         endif()
 
         if(APPLE)
+            string(REPLACE ";" "$<SEMICOLON>" ESCAPED_CMAKE_OSX_ARCHITECTURES "${CMAKE_OSX_ARCHITECTURES}")
+
             set(lcms2_CMAKE_ARGS
-                ${lcms2_CMAKE_ARGS} -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET})
+                ${lcms2_CMAKE_ARGS}
+                -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
+                -DCMAKE_OSX_ARCHITECTURES=${ESCAPED_CMAKE_OSX_ARCHITECTURES}
+            )
+        endif()
+
+        if (ANDROID)
+            set(lcms2_CMAKE_ARGS
+                ${lcms2_CMAKE_ARGS}
+                -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+                -DANDROID_ABI=${ANDROID_ABI}
+                -DANDROID_STL=${ANDROID_STL})
         endif()
 
         # Hack to let imported target be built from ExternalProject_Add

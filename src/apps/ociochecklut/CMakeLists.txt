@@ -14,19 +14,14 @@ set(SOURCES
 
 add_executable(ociochecklut ${SOURCES})
 
-if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(ociochecklut
-        PRIVATE
-        OpenColorIO_SKIP_IMPORTS
-    )
-endif()
-
 if(MSVC)
-    set(PLATFORM_COMPILE_FLAGS "${PLATFORM_COMPILE_FLAGS} /wd4996")
+    set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/wd4996")
 endif()
 
 set_target_properties(ociochecklut PROPERTIES 
-    COMPILE_FLAGS "${PLATFORM_COMPILE_FLAGS}")
+    COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
+    LINK_OPTIONS "${PLATFORM_LINK_OPTIONS}"
+)
 
 target_link_libraries(ociochecklut 
     PRIVATE 

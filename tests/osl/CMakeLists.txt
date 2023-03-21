@@ -18,13 +18,6 @@ set(SOURCES
 
 add_executable(test_osl_exec ${SOURCES})
 
-if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(test_osl_exec
-        PRIVATE
-            OpenColorIO_SKIP_IMPORTS
-    )
-endif()
-
 if(OCIO_USE_SSE)
     target_compile_definitions(test_osl_exec
         PRIVATE
@@ -33,7 +26,12 @@ if(OCIO_USE_SSE)
 endif(OCIO_USE_SSE)
 
 set_target_properties(test_osl_exec PROPERTIES 
-    COMPILE_FLAGS "${PLATFORM_COMPILE_FLAGS}")
+    COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
+    LINK_OPTIONS "${PLATFORM_LINK_OPTIONS}"
+)
+
+# Because some OpenImageIO types are present in the OSL public API that dependency is mandatory;
+# however, the unit test framework itself does not have any OpenImageIO dependency.
 
 target_link_libraries(test_osl_exec
     PRIVATE

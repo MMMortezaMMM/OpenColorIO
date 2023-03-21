@@ -69,10 +69,12 @@ PYBIND11_MODULE(PyOpenColorIO, m)
 
     // OpenColorIO
     bindPyBaker(m);
+    bindPyBuiltinConfigRegistry(m);
     bindPyColorSpace(m);
     bindPyColorSpaceSet(m);
     bindPyConfig(m);
     bindPyContext(m);
+    bindPyConfigIOProxy(m);
     bindPyCPUProcessor(m);
     bindPyFileRules(m);
     bindPyGPUProcessor(m);

@@ -20,7 +20,10 @@ on:
       - v1.*
     paths:
       - .github/workflows/wheel_workflow.yml
+      - MANIFEST.in
       - pyproject.toml
+      - setup.cfg
+      - setup.py
   schedule:
     # Nightly build
     - cron: "0 0 * * *"
@@ -35,7 +38,33 @@ jobs:
   # version), we build on manylinux2014 image, this requires pip >= 19.3.
 
   # ---------------------------------------------------------------------------
-  # Linux
+  # Source Distribution
+  # ---------------------------------------------------------------------------
+
+  sdist:
+    name: Build SDist
+    runs-on: ubuntu-latest
+    # Don't run on OCIO forks
+    if: |
+      github.event_name != 'schedule' ||
+      github.repository == 'AcademySoftwareFoundation/OpenColorIO'
+
+    steps:
+
+    - uses: actions/checkout@v3
+
+    - name: Build SDist
+      run: pipx run build --sdist
+
+    - name: Check metadata
+      run: pipx run twine check dist/*
+
+    - uses: actions/upload-artifact@v3
+      with:
+        path: dist/*.tar.gz
+
+  # ---------------------------------------------------------------------------
+  # Linux Wheels
   # ---------------------------------------------------------------------------
 
   linux:
@@ -49,90 +78,72 @@ jobs:
       matrix:
         include:
           # -------------------------------------------------------------------
-          # CPython 32 bits
-          # -------------------------------------------------------------------
-          - build: CPython 3.6 32 bits
-            python: cp36-*
-            arch: i686
-          - build: CPython 3.7 32 bits
-            python: cp37-*
-            arch: i686
-          - build: CPython 3.8 32 bits
-            python: cp38-*
-            arch: i686
-          - build: CPython 3.9 32 bits
-            python: cp39-*
-            arch: i686
-          - build: CPython 3.10 32 bits
-            python: cp310-*
-            arch: i686
-          # -------------------------------------------------------------------
           # CPython 64 bits
           # -------------------------------------------------------------------
-          - build: CPython 3.6 64 bits
-            python: cp36-*
-            arch: x86_64
           - build: CPython 3.7 64 bits
-            python: cp37-*
+            python: cp37-manylinux*
             arch: x86_64
           - build: CPython 3.8 64 bits
-            python: cp38-*
+            python: cp38-manylinux*
             arch: x86_64
           - build: CPython 3.9 64 bits
-            python: cp39-*
+            python: cp39-manylinux*
             arch: x86_64
           - build: CPython 3.10 64 bits
-            python: cp310-*
+            python: cp310-manylinux*
+            arch: x86_64
+          - build: CPython 3.11 64 bits
+            python: cp311-manylinux*
             arch: x86_64
           # -------------------------------------------------------------------
           # CPython ARM 64 bits
           # -------------------------------------------------------------------
-          - build: CPython 3.6 ARM 64 bits
-            python: cp36-*
-            arch: aarch64
           - build: CPython 3.7 ARM 64 bits
-            python: cp37-*
+            python: cp37-manylinux*
             arch: aarch64
           - build: CPython 3.8 ARM 64 bits
-            python: cp38-*
+            python: cp38-manylinux*
             arch: aarch64
           - build: CPython 3.9 ARM 64 bits
-            python: cp39-*
+            python: cp39-manylinux*
             arch: aarch64
           - build: CPython 3.10 ARM 64 bits
-            python: cp310-*
+            python: cp310-manylinux*
+            arch: aarch64
+          - build: CPython 3.11 ARM 64 bits
+            python: cp311-manylinux*
             arch: aarch64
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         name: Install Python
         with:
           python-version: '3.8'
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
         with:
           platforms: all
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.1.2
+        uses: pypa/cibuildwheel@v2.12.0
         env:
           CIBW_BUILD: ${{ matrix.python }}
           CIBW_ARCHS: ${{ matrix.arch }}
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
 
   # ---------------------------------------------------------------------------
-  # macOS
+  # macOS Wheels
   # ---------------------------------------------------------------------------
 
   macos:
     name: Build wheels on macOS
-    runs-on: macos-10.15
+    runs-on: macos-11
     # Don't run on OCIO forks
     if: |
       github.event_name != 'schedule' ||
@@ -143,9 +154,6 @@ jobs:
           # -------------------------------------------------------------------
           # CPython 64 bits
           # -------------------------------------------------------------------
-          - build: CPython 3.6 64 bits
-            python: cp36-*
-            arch: x86_64
           - build: CPython 3.7 64 bits
             python: cp37-*
             arch: x86_64
@@ -157,6 +165,9 @@ jobs:
             arch: x86_64
           - build: CPython 3.10 64 bits
             python: cp310-*
+            arch: x86_64
+          - build: CPython 3.11 64 bits
+            python: cp311-*
             arch: x86_64
           # -------------------------------------------------------------------
           # CPython ARM 64 bits
@@ -170,27 +181,30 @@ jobs:
           - build: CPython 3.10 ARM 64 bits
             python: cp310-*
             arch: arm64
+          - build: CPython 3.11 ARM 64 bits
+            python: cp311-*
+            arch: arm64
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         name: Install Python
         with:
           python-version: '3.8'
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.1.2
+        uses: pypa/cibuildwheel@v2.12.0
         env:
           CIBW_BUILD: ${{ matrix.python }}
           CIBW_ARCHS: ${{ matrix.arch }}
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
 
   # ---------------------------------------------------------------------------
-  # Windows
+  # Windows Wheels
   # ---------------------------------------------------------------------------
 
   windows:
@@ -204,29 +218,8 @@ jobs:
       matrix:
         include:
           # -------------------------------------------------------------------
-          # CPython 32 bits
-          # -------------------------------------------------------------------
-          - build: CPython 3.6 32 bits
-            python: cp36-*
-            arch: x86
-          - build: CPython 3.7 32 bits
-            python: cp37-*
-            arch: x86
-          - build: CPython 3.8 32 bits
-            python: cp38-*
-            arch: x86
-          - build: CPython 3.9 32 bits
-            python: cp39-*
-            arch: x86
-          - build: CPython 3.10 32 bits
-            python: cp310-*
-            arch: x86
-          # -------------------------------------------------------------------
           # CPython 64 bits
           # -------------------------------------------------------------------
-          - build: CPython 3.6 64 bits
-            python: cp36-*
-            arch: AMD64
           - build: CPython 3.7 64 bits
             python: cp37-*
             arch: AMD64
@@ -239,34 +232,37 @@ jobs:
           - build: CPython 3.10 64 bits
             python: cp310-*
             arch: AMD64
+          - build: CPython 3.11 64 bits
+            python: cp311-*
+            arch: AMD64
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         name: Install Python
         with:
           python-version: '3.8'
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.1.2
+        uses: pypa/cibuildwheel@v2.12.0
         env:
           CIBW_BUILD: ${{ matrix.python }}
           CIBW_ARCHS: ${{ matrix.arch }}
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
 
 
   upload_pypi:
-    needs: [linux, macos, windows]
+    needs: [sdist, linux, macos, windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     steps:
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: artifact
           path: dist

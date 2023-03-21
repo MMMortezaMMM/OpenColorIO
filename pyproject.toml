@@ -1,14 +1,9 @@
-
-[project]
-requires-python = ">=2.7, >=3.6"
-
 [build-system]
 requires = [
     "setuptools>=42",
     "wheel",
-    "cmake>=3.12",
-    "ninja",
-    "pybind11>=2.6.1",
+    "cmake>=3.13",
+    "ninja; sys_platform != 'win32' and platform_machine != 'arm64'",
     # Documentation requirements
     "six",
     "testresources",

@@ -118,6 +118,12 @@ void bindPyNamedTransform(py::module & m)
              "categories"_a = getCategoriesStdVec(DEFAULT),
              DOC(NamedTransform, Create))
 
+        .def("__deepcopy__", [](const ConstNamedTransformRcPtr & self, py::dict)
+            {
+                return self->createEditableCopy();
+            },
+            "memo"_a)
+
         .def("getName", &NamedTransform::getName,
              DOC(NamedTransform, getName))
         .def("setName", &NamedTransform::setName, "name"_a.none(false),
@@ -145,7 +151,7 @@ void bindPyNamedTransform(py::module & m)
              DOC(NamedTransform, setDescription))
         .def("getEncoding", &NamedTransform::getEncoding,
              DOC(NamedTransform, getEncoding))
-        .def("setEncoding", &NamedTransform::setEncoding, "encodig"_a.none(false),
+        .def("setEncoding", &NamedTransform::setEncoding, "encoding"_a.none(false),
              DOC(NamedTransform, setEncoding))
 
         // Transform
@@ -153,6 +159,9 @@ void bindPyNamedTransform(py::module & m)
              DOC(NamedTransform, getTransform))
         .def("setTransform", &NamedTransform::setTransform, "transform"_a, "direction"_a,
              DOC(NamedTransform, setTransform))
+
+        .def_static("GetTransform", &NamedTransform::GetTransform, "transform"_a, "direction"_a,
+                    DOC(NamedTransform, GetTransform))
 
         // Categories
         .def("hasCategory", &NamedTransform::hasCategory, "category"_a,

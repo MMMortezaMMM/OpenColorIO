@@ -7,15 +7,10 @@ set(SOURCES
 
 add_executable(ocioperf ${SOURCES})
 
-if(NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(ocioperf
-        PRIVATE
-            OpenColorIO_SKIP_IMPORTS
-    )
-endif()
-
 set_target_properties(ocioperf PROPERTIES
-    COMPILE_FLAGS "${PLATFORM_COMPILE_FLAGS}")
+    COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
+    LINK_OPTIONS "${PLATFORM_LINK_OPTIONS}"
+)
 
 target_link_libraries(ocioperf
     PRIVATE

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright Contributors to the OpenColorIO Project.
 
+import copy
 import unittest
 import os
 import sys
@@ -9,7 +10,8 @@ import PyOpenColorIO as OCIO
 from UnitTestUtils import (SIMPLE_CONFIG_VIRTUAL_DISPLAY,
                            SIMPLE_CONFIG_VIRTUAL_DISPLAY_ACTIVE_DISPLAY,
                            SIMPLE_CONFIG_VIRTUAL_DISPLAY_V1,
-                           SIMPLE_CONFIG_VIRTUAL_DISPLAY_EXCEPTION)
+                           SIMPLE_CONFIG_VIRTUAL_DISPLAY_EXCEPTION,
+                           TEST_DATAFILES_DIR)
 
 # Legacy tests kept for reference.
 #
@@ -244,6 +246,46 @@ from UnitTestUtils import (SIMPLE_CONFIG_VIRTUAL_DISPLAY,
 
 
 class ConfigTest(unittest.TestCase):
+
+    def test_copy(self):
+        """
+        Test the deepcopy() method.
+        """
+        cfg = OCIO.Config.CreateRaw()
+        cfg.setMajorVersion(2)
+        cfg.setMinorVersion(1)
+        cfg.setName('test config')
+        cfg.setDescription('test description')
+
+        cfg.addColorSpace(
+            OCIO.ColorSpace(OCIO.REFERENCE_SPACE_DISPLAY,
+                            "display_cs",
+                            toReference=OCIO.CDLTransform(sat=1.5)))
+        cfg.addColorSpace(
+            OCIO.ColorSpace(OCIO.REFERENCE_SPACE_SCENE,
+                            "raw",
+                            isData=True))
+
+        rules = OCIO.FileRules()
+        rules.insertRule(0, 'A', 'raw', '*', 'exr')
+        rules.insertRule(1, 'B', 'display_cs', '*', 'png')
+        cfg.setFileRules(rules)
+
+        other = copy.deepcopy(cfg)
+        self.assertFalse(other is cfg)
+
+        self.assertEqual(other.getMajorVersion(), cfg.getMajorVersion())
+        self.assertEqual(other.getMinorVersion(), cfg.getMinorVersion())
+        self.assertEqual(other.getName(), cfg.getName())
+        self.assertEqual(other.getDescription(), cfg.getDescription())
+        self.assertEqual(list(other.getColorSpaceNames()), list(cfg.getColorSpaceNames()))
+        self.assertEqual(other.getFileRules().getNumEntries(), cfg.getFileRules().getNumEntries())
+
+        # Check that the file rules are not shared between the two config instances.
+        rules.removeRule(0)
+        other.setFileRules(rules)
+        self.assertEqual(other.getFileRules().getNumEntries(), cfg.getFileRules().getNumEntries() - 1)
+
     def test_shared_views(self):
         # Test these Config functions: addSharedView, getSharedViews, removeSharedView.
 
@@ -861,6 +903,288 @@ colorspaces:
             len(cfg.getVirtualDisplayViews(OCIO.VIEW_DISPLAY_DEFINED)))
         self.assertEqual(0, len(cfg.getVirtualDisplayViews(OCIO.VIEW_SHARED)))
 
+    def test_create_builtin_config(self):
+        # ********************************
+        # Testing CG config.
+        # ********************************
+
+        numberOfExpectedColorspaces = 14
+        # Testing CreateFromBuiltinConfig with a known built-in config name.
+        builtinCfgA = OCIO.Config.CreateFromBuiltinConfig("cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        builtinCfgA.validate()
+        self.assertEqual(builtinCfgA.getName(), "cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        self.assertEqual(len(builtinCfgA.getColorSpaceNames()), numberOfExpectedColorspaces)
+
+        # Testing CreateFromEnv with an known built-in config name using URI Syntax.
+        try:
+            OCIO.SetEnvVariable('OCIO', 'ocio://cg-config-v1.0.0_aces-v1.3_ocio-v2.1')
+            builtinCfgB = OCIO.Config.CreateFromEnv()
+            builtinCfgB.validate()
+            self.assertEqual(builtinCfgB.getName(), "cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+            self.assertEqual(len(builtinCfgB.getColorSpaceNames()), numberOfExpectedColorspaces)
+        finally:
+            OCIO.UnsetEnvVariable('OCIO')
+
+        # Testing CreateFromFile with an known built-in config name using URI Syntax.
+        builtinCfgC = OCIO.Config.CreateFromFile("ocio://cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        builtinCfgC.validate()
+        self.assertEqual(builtinCfgC.getName(), "cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        self.assertEqual(len(builtinCfgC.getColorSpaceNames()), numberOfExpectedColorspaces)
+
+        # ********************************
+        # Testing STUDIO config.
+        # ********************************
+
+        numberOfExpectedColorspaces = 39;
+        # Testing CreateFromBuiltinConfig with a known built-in config name.
+        builtinCfgA = OCIO.Config.CreateFromBuiltinConfig("studio-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        builtinCfgA.validate()
+        self.assertEqual(builtinCfgA.getName(), "studio-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        self.assertEqual(len(builtinCfgA.getColorSpaceNames()), numberOfExpectedColorspaces)
+
+        # Testing CreateFromEnv with an known built-in config name using URI Syntax.
+        try:
+            OCIO.SetEnvVariable('OCIO', 'ocio://studio-config-v1.0.0_aces-v1.3_ocio-v2.1')
+            builtinCfgB = OCIO.Config.CreateFromEnv()
+            builtinCfgB.validate()
+            self.assertEqual(builtinCfgB.getName(), "studio-config-v1.0.0_aces-v1.3_ocio-v2.1")
+            self.assertEqual(len(builtinCfgB.getColorSpaceNames()), numberOfExpectedColorspaces)
+        finally:
+            OCIO.UnsetEnvVariable('OCIO')
+
+        # Testing CreateFromFile with an known built-in config name using URI Syntax.
+        builtinCfgC = OCIO.Config.CreateFromFile("ocio://studio-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        builtinCfgC.validate()
+        self.assertEqual(builtinCfgC.getName(), "studio-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        self.assertEqual(len(builtinCfgC.getColorSpaceNames()), numberOfExpectedColorspaces)
+
+        # ********************************
+        # Testing default config.
+        # ********************************
+        
+        # Testing CreateFromEnv with the default config using URI Syntax.
+        try:
+            OCIO.SetEnvVariable('OCIO', 'ocio://default')
+            builtinCfgD = OCIO.Config.CreateFromEnv()
+            builtinCfgD.validate()
+            self.assertEqual(builtinCfgD.getName(), "cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+            self.assertEqual(len(builtinCfgD.getColorSpaceNames()), 14)
+        finally:
+            OCIO.UnsetEnvVariable('OCIO')
+
+        # Testing CreateFromFile with the default config using URI Syntax.
+        builtinCfgE = OCIO.Config.CreateFromFile("ocio://default")
+        builtinCfgE.validate()
+        self.assertEqual(builtinCfgE.getName(), "cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
+        self.assertEqual(len(builtinCfgE.getColorSpaceNames()), 14)
+
+        # ********************************
+        # Testing some expected failures.
+        # ********************************
+
+        # Testing CreateFromBuiltinConfig with an unknown built-in config name.
+        with self.assertRaises(OCIO.Exception) as cm:
+            OCIO.Config.CreateFromBuiltinConfig("I-do-not-exist")
+
+        self.assertEqual(
+            str(cm.exception), 
+            "Could not find 'I-do-not-exist' in the built-in configurations."
+        )
+        
+        # Testing CreateFromFile with an unknown built-in config name using URI syntax.
+        with self.assertRaises(OCIO.Exception) as cm:
+            OCIO.Config.CreateFromFile("ocio://I-do-not-exist")
+
+        self.assertEqual(
+            str(cm.exception), 
+            "Could not find 'I-do-not-exist' in the built-in configurations."
+        )
+
+        # Testing CreateFromEnv with an unknown built-in config.
+        try:
+            OCIO.SetEnvVariable('OCIO', 'ocio://thedefault')
+            with self.assertRaises(OCIO.Exception) as cm:  
+                OCIO.Config.CreateFromEnv()
+
+            self.assertEqual(
+                str(cm.exception), 
+                "Could not find 'thedefault' in the built-in configurations."
+            )
+        finally:
+            OCIO.UnsetEnvVariable('OCIO')
+
+    def test_create_from_archive(self):
+        # CreateFromFile using an archive built on Windows.
+        ocioz_file = os.path.normpath(
+            os.path.join(
+                TEST_DATAFILES_DIR, 'configs', 'context_test1', 'context_test1_windows.ocioz'
+            )
+        )
+        config = OCIO.Config.CreateFromFile(ocioz_file)
+        config.validate()
+        
+        # Simple check on the number of color spaces in the test config.
+        self.assertEqual(len(config.getColorSpaceNames()), 13)
+
+        # Simple test to exercise ConfigIOProxy.
+        processor = config.getProcessor("plain_lut1_cs", "shot1_lut1_cs")
+        processor.getDefaultCPUProcessor()
+
+        # CreateFromFile using an archive built with Unix-style path.
+        ocioz_file = os.path.normpath(
+            os.path.join(
+                TEST_DATAFILES_DIR, 'configs', 'context_test1', 'context_test1_linux.ocioz'
+            )
+        )
+        config = OCIO.Config.CreateFromFile(ocioz_file)
+        config.validate()
+        
+        # Simple check on the number of color spaces in the test config.
+        self.assertEqual(len(config.getColorSpaceNames()), 13)
+
+        # Simple test to exercise ConfigIOProxy.
+        processor = config.getProcessor("plain_lut1_cs", "shot1_lut1_cs")
+        processor.getDefaultCPUProcessor()
+
+        # Empty OCIOZ archive.
+        ocioz_file = os.path.normpath(
+            os.path.join(
+                TEST_DATAFILES_DIR, 'configs', 'ocioz_archive_configs', 'empty.ocioz'
+            )
+        )
+        with self.assertRaises(OCIO.Exception):
+            OCIO.Config.CreateFromFile(ocioz_file)
+
+        # Missing config file but contains LUTs files.
+        ocioz_file = os.path.normpath(
+            os.path.join(
+                TEST_DATAFILES_DIR, 'configs', 'ocioz_archive_configs', 'missing_config.ocioz'
+            )
+        )
+        with self.assertRaises(OCIO.Exception):
+            OCIO.Config.CreateFromFile(ocioz_file)
+
+        # Missing LUT files but contains config file.
+        ocioz_file = os.path.normpath(
+            os.path.join(
+                TEST_DATAFILES_DIR, 'configs', 'ocioz_archive_configs', 'config_missing_luts.ocioz'
+            )
+        )
+
+        config = OCIO.Config.CreateFromFile(ocioz_file)
+        # The following validation will succeed because validate() does not try to fetch the LUT
+        # files. It resolves the context variables in the paths string.
+        config.validate()
+
+        with self.assertRaises(OCIO.Exception):
+            config.getProcessor("plain_lut1_cs", "shot1_lut1_cs")
+
+    def test_create_from_config_io_proxy(self):
+        
+        # Simulate that the config and LUT are in memory by initializing three variables
+        # simple_config is the config
+
+        SIMPLE_CONFIG = """ocio_profile_version: 2
+search_path: "my_unique_luts"
+strictparsing: true
+luma: [0.2126, 0.7152, 0.0722]
+
+roles:
+  default: raw
+  scene_linear: c1
+
+displays:
+  sRGB:
+    - !<View> {name: Raw, colorspace: raw}
+
+active_displays: []
+active_views: []
+
+colorspaces:
+
+  - !<ColorSpace>
+    name: raw
+    isdata: true
+
+  - !<ColorSpace>
+    name: c1
+    to_reference: !<FileTransform> {src: my_unique_lut1.clf}
+
+  - !<ColorSpace>
+    name: c2
+    to_reference: !<FileTransform> {src: my_unique_lut2.clf}
+"""
+
+        C1_LUT = """<?xml version="1.0" encoding="UTF-8"?>
+<ProcessList id="none" compCLFversion="3.0">
+    <Matrix inBitDepth="32f" outBitDepth="32f">
+        <Array dim="3 3">
+1 0 0
+0 1 0
+0 0 1
+        </Array>
+    </Matrix>
+</ProcessList>
+"""
+
+        C2_LUT = """<?xml version="1.0" encoding="UTF-8"?>
+<ProcessList id="none" compCLFversion="3.0">
+    <Matrix inBitDepth="32f" outBitDepth="32f">
+        <Array dim="3 3">
+2 0 0
+0 2 0
+0 0 2
+        </Array>
+    </Matrix>
+</ProcessList>
+"""
+
+        class CIOPTest(OCIO.PyConfigIOProxy):
+            def getConfigData(self):
+                # This implementation is only to demonstrate the functionality.
+
+                # Simulate that the config is coming from some kind of in-memory location.
+                return SIMPLE_CONFIG
+
+            def getLutData(self, filepath):
+                # This implementation is only to demonstrate the functionality.
+
+                # Simulate that the LUT are coming from some kind of in-memory location.
+                # Create an empty bytearray.
+                data = bytearray()
+                if filepath == os.path.join('my_unique_luts', 'my_unique_lut1.clf'):
+                    data = bytearray(C1_LUT.encode('utf-8'))
+                elif filepath == os.path.join('my_unique_luts', 'my_unique_lut2.clf'):
+                    data = bytearray(C2_LUT.encode('utf-8'))
+                return data
+
+            def getFastLutFileHash(self, filepath):
+                # This implementation is only to demonstrate the functionality.
+
+                def lutExists(filepath):
+                    if filepath == os.path.join('my_unique_luts', 'my_unique_lut1.clf'):
+                        return True
+                    elif filepath == os.path.join('my_unique_luts', 'my_unique_lut2.clf'):
+                        return True
+                    return False
+
+                # Check if the file exists.
+                if lutExists(filepath):
+                    # This is a bad hash, but using the filename as hash for simplicity and 
+                    # demonstration purpose.
+                    hash = filepath
+                return hash
+
+        ciop = CIOPTest()
+        config = OCIO.Config.CreateFromConfigIOProxy(ciop)
+        config.validate()
+
+        # Simple check on the number of color spaces in the test config.
+        self.assertEqual(len(config.getColorSpaceNames()), 3)
+
+        # Simple test to exercise ConfigIOProxy.
+        processor = config.getProcessor("c1", "c2")
+        processor.getDefaultCPUProcessor()
 
 class ConfigVirtualWithActiveDisplayTest(unittest.TestCase):
     def setUp(self):

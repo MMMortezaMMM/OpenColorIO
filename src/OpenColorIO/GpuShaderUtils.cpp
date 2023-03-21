@@ -143,9 +143,13 @@ std::string getTexSample(GpuLanguage lang,
     switch (lang)
     {
         case GPU_LANGUAGE_GLSL_1_2:
-        case GPU_LANGUAGE_GLSL_1_3:
         {
             kw << "texture" << N << "D(" << samplerName << ", " << coords << ")";
+            break;
+        }
+        case GPU_LANGUAGE_GLSL_1_3:
+        {
+            kw << "texture(" << samplerName << ", " << coords << ")";
             break;
         }
         case GPU_LANGUAGE_GLSL_ES_1_0:
@@ -335,10 +339,15 @@ std::string GpuShaderText::constKeyword() const
         case GPU_LANGUAGE_GLSL_4_0:
         case GPU_LANGUAGE_GLSL_ES_1_0:
         case GPU_LANGUAGE_GLSL_ES_3_0:
-        case GPU_LANGUAGE_HLSL_DX11:
         case GPU_LANGUAGE_MSL_2_0:
         {
             str += "const";
+            str += " ";
+            break;
+        }
+        case GPU_LANGUAGE_HLSL_DX11:
+        {
+            str += "static const";
             str += " ";
             break;
         }
@@ -378,6 +387,16 @@ std::string GpuShaderText::floatDecl(const std::string & name) const
 std::string GpuShaderText::intKeyword() const
 {
     return "int";
+}
+
+std::string GpuShaderText::intKeywordConst() const
+{
+    std::string str;
+
+    str += constKeyword();
+    str += intKeyword();
+
+    return str;
 }
 
 std::string GpuShaderText::colorDecl(const std::string & name) const
@@ -547,7 +566,7 @@ void GpuShaderText::declareIntArrayConst(const std::string & name, int size, con
         case GPU_LANGUAGE_GLSL_ES_1_0:
         case GPU_LANGUAGE_GLSL_ES_3_0:
         {
-            nl << "const " << intKeyword() << " " << name << "[" << size << "] = "
+            nl << intKeywordConst() << " " << name << "[" << size << "] = "
                << intKeyword() << "[" << size << "](";
             for (int i = 0; i < size; ++i)
             {
@@ -563,7 +582,7 @@ void GpuShaderText::declareIntArrayConst(const std::string & name, int size, con
         case GPU_LANGUAGE_HLSL_DX11:
         case GPU_LANGUAGE_MSL_2_0:
         {
-            nl << "const " << intKeyword() << " " << name << "[" << size << "] = {";
+            nl << intKeywordConst() << " " << name << "[" << size << "] = {";
             for (int i = 0; i < size; ++i)
             {
                 nl << v[i];
@@ -1072,8 +1091,10 @@ std::string GpuShaderText::atan2(const std::string & y,
         }
         case GPU_LANGUAGE_HLSL_DX11:
         {
-            // note: operand order is swapped in HLSL
-            kw << "atan2(" << x << ", " << y << ")";
+            // note: Various internet sources claim that the x & y arguments need to be
+            // swapped for HLSL (relative to GLSL).  However, recent testing on Windows
+            // has revealed that the argument order needs to be the same as GLSL.
+            kw << "atan2(" << y << ", " << x << ")";
             break;
         }
         case LANGUAGE_OSL_1:
