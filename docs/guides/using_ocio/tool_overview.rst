@@ -189,6 +189,17 @@ Use the --help argument for more information on to the available options.
 .. TODO: Examples
 
 
+.. _overview-ociocpuinfo:
+
+ociocpuinfo
+***********
+
+This tool simply prints information about the CPU in your computer. OCIO will
+switch in different versions of the apply functions based on which SIMD
+instruction sets are supported by a given CPU, so this is provided as a
+potential trouble-shooting tool.
+
+
 .. _overview-ociodisplay:
 
 ociodisplay
@@ -303,6 +314,16 @@ Examples::
     # ‘marcie.dpx’ ten times.
 
 .. TODO: examples formatting
+
+
+.. _overview-ocioview:
+
+ocioview
+********
+
+This is a new GUI tool for inspecting and editing config files. It is currently an
+alpha release and we are looking for contributors to extend it or provide tutorials.
+Please see the README in apps/ocioview for details about installation.
 
 
 .. _overview-ociowrite:

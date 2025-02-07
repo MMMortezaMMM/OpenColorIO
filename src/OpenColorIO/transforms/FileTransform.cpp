@@ -9,6 +9,8 @@
 #include <iostream>
 #include <iterator>
 
+#include <pystring.h>
+
 #include <OpenColorIO/OpenColorIO.h>
 
 #include "Caching.h"
@@ -19,7 +21,6 @@
 #include "ops/noop/NoOps.h"
 #include "PathUtils.h"
 #include "Platform.h"
-#include "pystring/pystring.h"
 #include "utils/StringUtils.h"
 
 namespace OCIO_NAMESPACE
@@ -155,6 +156,11 @@ const char * FileTransform::GetFormatNameByIndex(int index)
 const char * FileTransform::GetFormatExtensionByIndex(int index)
 {
     return FormatRegistry::GetInstance().getFormatExtensionByIndex(FORMAT_CAPABILITY_READ, index);
+}
+
+bool FileTransform::IsFormatExtensionSupported(const char * extension)
+{
+    return FormatRegistry::GetInstance().isFormatExtensionSupported(extension);
 }
 
 std::ostream& operator<< (std::ostream& os, const FileTransform& t)
@@ -519,6 +525,32 @@ const char * FormatRegistry::getFormatExtensionByIndex(int capability, int index
         return m_writeFormatExtensions[index].c_str();
     }
     return "";
+}
+
+bool FormatRegistry::isFormatExtensionSupported(const char * extension) const
+{
+    // Early return false with an input of just the dot or invalid pointer.
+    if (!extension || !*extension || 0 == strcmp(extension, "."))
+    {
+        return false;
+    }
+
+    // If dot is present at the start, pointer arithmetic increment up by one to ignore that dot.
+    FileFormatVectorMap::const_iterator iter;
+    if (extension[0] == '.')
+    {
+        iter = m_formatsByExtension.find(StringUtils::Lower(extension + 1));
+    }
+    else
+    {
+        iter = m_formatsByExtension.find(StringUtils::Lower(extension));
+    }
+
+    if (iter != m_formatsByExtension.end())
+    {
+        return true;
+    }
+    return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////

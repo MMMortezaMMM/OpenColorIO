@@ -18,13 +18,6 @@ set(SOURCES
 
 add_executable(test_osl_exec ${SOURCES})
 
-if(OCIO_USE_SSE)
-    target_compile_definitions(test_osl_exec
-        PRIVATE
-            USE_SSE
-    )
-endif(OCIO_USE_SSE)
-
 set_target_properties(test_osl_exec PROPERTIES 
     COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
     LINK_OPTIONS "${PLATFORM_LINK_OPTIONS}"
@@ -55,7 +48,7 @@ if(MSVC AND BUILD_SHARED_LIBS)
         set(BUILD_TYPE ${CMAKE_BUILD_TYPE})
     endif()
 
-    set(NEW_PATH "${CMAKE_BINARY_DIR}/src/OpenColorIO/${BUILD_TYPE}")
+    set(NEW_PATH "${PROJECT_BINARY_DIR}/src/OpenColorIO/${BUILD_TYPE}")
     set(NEW_PATH "${NEW_PATH}\\\;${GLUT_INCLUDE_DIR}/../bin")
     set(NEW_PATH "${NEW_PATH}\\\;${GLEW_INCLUDE_DIRS}/../bin")
 

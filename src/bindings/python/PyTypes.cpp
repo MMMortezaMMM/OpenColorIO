@@ -527,6 +527,8 @@ void bindPyTypes(py::module & m)
                DOC(PyOpenColorIO, GpuLanguage, GPU_LANGUAGE_HLSL_DX11))
         .value("GPU_LANGUAGE_MSL_2_0", GPU_LANGUAGE_MSL_2_0,
                DOC(PyOpenColorIO, GpuLanguage, GPU_LANGUAGE_MSL_2_0))
+        .value("LANGUAGE_OSL_1", LANGUAGE_OSL_1,
+               DOC(PyOpenColorIO, GpuLanguage, LANGUAGE_OSL_1))
         .export_values();
 
     py::enum_<EnvironmentMode>(
@@ -581,6 +583,20 @@ void bindPyTypes(py::module & m)
                DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_ACES_GAMUTMAP_07))
         .value("FIXED_FUNCTION_ACES_GAMUT_COMP_13", FIXED_FUNCTION_ACES_GAMUT_COMP_13,
                DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_ACES_GAMUT_COMP_13))
+        .value("FIXED_FUNCTION_LIN_TO_PQ", FIXED_FUNCTION_LIN_TO_PQ,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_LIN_TO_PQ))
+        .value("FIXED_FUNCTION_LIN_TO_GAMMA_LOG", FIXED_FUNCTION_LIN_TO_GAMMA_LOG,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_LIN_TO_GAMMA_LOG))
+        .value("FIXED_FUNCTION_LIN_TO_DOUBLE_LOG", FIXED_FUNCTION_LIN_TO_DOUBLE_LOG,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_LIN_TO_DOUBLE_LOG))
+        .value("FIXED_FUNCTION_ACES_OUTPUT_TRANSFORM_20", FIXED_FUNCTION_ACES_OUTPUT_TRANSFORM_20,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_ACES_OUTPUT_TRANSFORM_20))
+        .value("FIXED_FUNCTION_ACES_RGB_TO_JMH_20", FIXED_FUNCTION_ACES_RGB_TO_JMH_20,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_ACES_RGB_TO_JMH_20))
+        .value("FIXED_FUNCTION_ACES_TONESCALE_COMPRESS_20", FIXED_FUNCTION_ACES_TONESCALE_COMPRESS_20,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_ACES_TONESCALE_COMPRESS_20))
+        .value("FIXED_FUNCTION_ACES_GAMUT_COMPRESS_20", FIXED_FUNCTION_ACES_GAMUT_COMPRESS_20,
+               DOC(PyOpenColorIO, FixedFunctionStyle, FIXED_FUNCTION_ACES_GAMUT_COMPRESS_20))
         .export_values();
 
     py::enum_<ExposureContrastStyle>(
@@ -880,6 +896,12 @@ void bindPyTypes(py::module & m)
     m.attr("OCIO_DISABLE_ALL_CACHES") = OCIO_DISABLE_ALL_CACHES;
     m.attr("OCIO_DISABLE_PROCESSOR_CACHES") = OCIO_DISABLE_PROCESSOR_CACHES;
     m.attr("OCIO_DISABLE_CACHE_FALLBACK") = OCIO_DISABLE_CACHE_FALLBACK;
+
+    m.attr("OCIO_CONFIG_DEFAULT_NAME") = OCIO_CONFIG_DEFAULT_NAME;
+    m.attr("OCIO_CONFIG_DEFAULT_FILE_EXT") = OCIO_CONFIG_DEFAULT_FILE_EXT;
+    m.attr("OCIO_CONFIG_ARCHIVE_FILE_EXT") = OCIO_CONFIG_ARCHIVE_FILE_EXT;
+
+    m.attr("OCIO_BUILTIN_URI_PREFIX") = OCIO_BUILTIN_URI_PREFIX;
 }
 
 } // namespace OCIO_NAMESPACE

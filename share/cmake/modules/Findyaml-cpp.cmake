@@ -1,25 +1,31 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright Contributors to the OpenColorIO Project.
 #
-# Locate or install yaml-cpp
+# Locate yaml-cpp
 #
 # Variables defined by this module:
-#   yaml-cpp_FOUND - If FALSE, do not try to link to yamlcpp
-#   yaml-cpp_LIBRARY - yaml-cpp library to link to
-#   yaml-cpp_INCLUDE_DIR - Where to find yaml.h
-#   yaml-cpp_VERSION - The version of the library
+#   yaml-cpp_FOUND          - Indicate whether the library was found or not
+#   yaml-cpp_LIBRARY        - Path to the library file
+#   yaml-cpp_INCLUDE_DIR    - Location of the header files
+#   yaml-cpp_VERSION        - Library's version
 #
-# Targets defined by this module:
-#   yaml-cpp - IMPORTED target, if found
+# Global targets defined by this module:
+#   yaml-cpp::yaml-cpp
 #
-# By default, the dynamic libraries of yaml-cpp will be found. To find the 
-# static ones instead, you must set the yaml-cpp_STATIC_LIBRARY variable to 
-# TRUE before calling find_package(yaml-cpp ...).
+# For compatibility with the upstream CMake package, the following variables and targets are defined:
+#   YAML_CPP_LIBRARIES      - Libraries to link against yaml-cpp
+#   YAML_CPP_INCLUDE_DIR    - Include directory
 #
-# If yaml-cpp is not installed in a standard path, you can use the 
-# yaml-cpp_ROOT variable to tell CMake where to find it. If it is not found 
-# and OCIO_INSTALL_EXT_PACKAGES is set to MISSING or ALL, yaml-cpp will be 
-# downloaded, built, and statically-linked into libOpenColorIO at build time.
+# Usually CMake will use the dynamic library rather than static, if both are present. 
+# In this case, you may set yaml-cpp_STATIC_LIBRARY to ON to request use of the static one. 
+# If only the static library is present (such as when OCIO builds the dependency), then the option 
+# is not needed.
+#
+# If the library is not installed in a typical location where CMake will find it, you may specify 
+# the location using one of the following methods:
+# -- Set -Dyaml-cpp_DIR to point to the directory containing the CMake configuration file for the package.
+# -- Set -Dyaml-cpp_ROOT to point to the directory containing the lib and include directories.
+# -- Set -Dyaml-cpp_LIBRARY and -Dyaml-cpp_INCLUDE_DIR to point to the lib and include directories.
 #
 
 ###############################################################################
@@ -34,16 +40,26 @@ if(CMAKE_BUILD_TYPE MATCHES "[Dd][Ee][Bb][Uu][Gg]")
    set(BUILD_TYPE_DEBUG ON)
 endif()
 
+if(yaml-cpp_FIND_QUIETLY)
+    set(quiet QUIET)
+endif()
+
 if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
     set(_yaml-cpp_REQUIRED_VARS yaml-cpp_LIBRARY)
 
+    # Search for yaml-cpp-config.cmake
     if(NOT DEFINED yaml-cpp_ROOT)
-        # Search for yaml-cpp-config.cmake
-        find_package(yaml-cpp ${yaml-cpp_FIND_VERSION} CONFIG QUIET)
+        find_package(yaml-cpp ${yaml-cpp_FIND_VERSION} CONFIG ${quiet})
     endif()
 
     if(yaml-cpp_FOUND)
-        get_target_property(yaml-cpp_LIBRARY yaml-cpp LOCATION)
+        # Alias target for yaml-cpp < 0.8 compatibility
+        if(TARGET yaml-cpp AND NOT TARGET yaml-cpp::yaml-cpp)
+            add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+        endif()
+
+        get_target_property(yaml-cpp_INCLUDE_DIR yaml-cpp::yaml-cpp INTERFACE_INCLUDE_DIRECTORIES)
+        get_target_property(yaml-cpp_LIBRARY yaml-cpp::yaml-cpp LOCATION)
     else()
 
         # As yaml-cpp-config.cmake search fails, search an installed library
@@ -52,14 +68,14 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
         list(APPEND _yaml-cpp_REQUIRED_VARS yaml-cpp_INCLUDE_DIR yaml-cpp_VERSION)
 
         # Search for yaml-cpp.pc
-        find_package(PkgConfig QUIET)
-        pkg_check_modules(PC_yaml-cpp QUIET "yaml-cpp>=${yaml-cpp_FIND_VERSION}")
+        find_package(PkgConfig ${quiet})
+        pkg_check_modules(PC_yaml-cpp ${quiet} "yaml-cpp>=${yaml-cpp_FIND_VERSION}")
 
         # Try to detect the version installed, if any.
         if(NOT PC_yaml-cpp_FOUND)
-            pkg_search_module(PC_yaml-cpp QUIET "yaml-cpp")
+            pkg_search_module(PC_yaml-cpp ${quiet} "yaml-cpp")
         endif()
-        
+
         # Find include directory
         find_path(yaml-cpp_INCLUDE_DIR 
             NAMES
@@ -84,7 +100,7 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
             # Prefer static lib names
             set(_yaml-cpp_STATIC_LIB_NAMES 
                 "${CMAKE_STATIC_LIBRARY_PREFIX}yaml-cpp${CMAKE_STATIC_LIBRARY_SUFFIX}")
-            
+
             # Starting from 0.7.0, all platforms uses the suffix "d" for debug.
             # See https://github.com/jbeder/yaml-cpp/blob/master/CMakeLists.txt#L141
             if(BUILD_TYPE_DEBUG)
@@ -120,144 +136,37 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
 
     include(FindPackageHandleStandardArgs)
     find_package_handle_standard_args(yaml-cpp
-        REQUIRED_VARS 
+        REQUIRED_VARS
             ${_yaml-cpp_REQUIRED_VARS}
         VERSION_VAR
             yaml-cpp_VERSION
     )
+
+    mark_as_advanced(yaml-cpp_INCLUDE_DIR yaml-cpp_LIBRARY yaml-cpp_VERSION)
 endif()
 
 ###############################################################################
-### Create target (if previous 'find_package' call hasn't) ###
+### Create target
 
-if(NOT TARGET yaml-cpp)
-    add_library(yaml-cpp UNKNOWN IMPORTED GLOBAL)
-    set(_yaml-cpp_TARGET_CREATE TRUE)
-endif()
-
-###############################################################################
-### Install package from source ###
-
-if(NOT yaml-cpp_FOUND AND OCIO_INSTALL_EXT_PACKAGES AND NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL NONE)
-    include(ExternalProject)
-    include(GNUInstallDirs)
-
-    set(_EXT_DIST_ROOT "${CMAKE_BINARY_DIR}/ext/dist")
-    set(_EXT_BUILD_ROOT "${CMAKE_BINARY_DIR}/ext/build")
-
-    # Set find_package standard args
-    set(yaml-cpp_FOUND TRUE)
-    set(yaml-cpp_VERSION ${yaml-cpp_FIND_VERSION})
-    set(yaml-cpp_INCLUDE_DIR "${_EXT_DIST_ROOT}/${CMAKE_INSTALL_INCLUDEDIR}")
-
-    # Starting from 0.7.0, this is included on all platforms, we could also
-    # override CMAKE_DEBUG_POSTFIX to bypass it.
-    if(BUILD_TYPE_DEBUG)
-        string(APPEND _yaml-cpp_LIB_SUFFIX "d")
-    endif()
-
-    # Set the expected library name
-    set(yaml-cpp_LIBRARY
-        "${_EXT_DIST_ROOT}/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}yaml-cpp${_yaml-cpp_LIB_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-
-    if(_yaml-cpp_TARGET_CREATE)
-        if(MSVC)
-            set(yaml-cpp_CXX_FLAGS "${yaml-cpp_CXX_FLAGS} /EHsc")
-        endif()
-
-        if(UNIX)
-            if(USE_CLANG)
-                # Remove some global 'shadow' warnings.
-                set(yaml-cpp_CXX_FLAGS "${yaml-cpp_CXX_FLAGS} -Wno-shadow")
-            endif()
-        endif()
-
-        string(STRIP "${yaml-cpp_CXX_FLAGS}" yaml-cpp_CXX_FLAGS)
-
-        set(yaml-cpp_CMAKE_ARGS
-            ${yaml-cpp_CMAKE_ARGS}
-            -DCMAKE_POLICY_DEFAULT_CMP0063=NEW
-            -DCMAKE_CXX_VISIBILITY_PRESET=${CMAKE_CXX_VISIBILITY_PRESET}
-            -DCMAKE_VISIBILITY_INLINES_HIDDEN=${CMAKE_VISIBILITY_INLINES_HIDDEN}
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-            -DCMAKE_CXX_FLAGS=${yaml-cpp_CXX_FLAGS}
-            -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
-            -DCMAKE_INSTALL_MESSAGE=${CMAKE_INSTALL_MESSAGE}
-            -DCMAKE_INSTALL_PREFIX=${_EXT_DIST_ROOT}
-            -DCMAKE_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
-            -DCMAKE_INSTALL_DATADIR=${CMAKE_INSTALL_DATADIR}
-            -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
-            -DCMAKE_INSTALL_INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
-            -DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJECT_PATH_MAX}
-            -DBUILD_SHARED_LIBS=OFF
-            -DYAML_BUILD_SHARED_LIBS=OFF
-            -DYAML_CPP_BUILD_TESTS=OFF
-            -DYAML_CPP_BUILD_TOOLS=OFF
-            -DYAML_CPP_BUILD_CONTRIB=OFF
-        )
-
-        if(CMAKE_TOOLCHAIN_FILE)
-            set(yaml-cpp_CMAKE_ARGS
-                ${yaml-cpp_CMAKE_ARGS} -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
-        endif()
-
-        if(APPLE)
-            string(REPLACE ";" "$<SEMICOLON>" ESCAPED_CMAKE_OSX_ARCHITECTURES "${CMAKE_OSX_ARCHITECTURES}")
-
-            set(yaml-cpp_CMAKE_ARGS
-                ${yaml-cpp_CMAKE_ARGS}
-                -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
-                -DCMAKE_OSX_ARCHITECTURES=${ESCAPED_CMAKE_OSX_ARCHITECTURES}
-            )
-        endif()
-
-
-        if (ANDROID)
-            set(yaml-cpp_CMAKE_ARGS
-                ${yaml-cpp_CMAKE_ARGS}
-                -DANDROID_PLATFORM=${ANDROID_PLATFORM}
-                -DANDROID_ABI=${ANDROID_ABI}
-                -DANDROID_STL=${ANDROID_STL})
-        endif()
-
-        set(yaml-cpp_GIT_TAG "yaml-cpp-${yaml-cpp_VERSION}")
-
-        # Hack to let imported target be built from ExternalProject_Add
-        file(MAKE_DIRECTORY ${yaml-cpp_INCLUDE_DIR})
-
-        ExternalProject_Add(yaml-cpp_install
-            GIT_REPOSITORY "https://github.com/jbeder/yaml-cpp.git"
-            GIT_TAG ${yaml-cpp_GIT_TAG}
-            GIT_CONFIG advice.detachedHead=false
-            GIT_SHALLOW TRUE
-            PREFIX "${_EXT_BUILD_ROOT}/yaml-cpp"
-            BUILD_BYPRODUCTS ${yaml-cpp_LIBRARY}
-            CMAKE_ARGS ${yaml-cpp_CMAKE_ARGS}
-            EXCLUDE_FROM_ALL TRUE
-            BUILD_COMMAND ""
-            INSTALL_COMMAND
-                ${CMAKE_COMMAND} --build .
-                                 --config ${CMAKE_BUILD_TYPE}
-                                 --target install
-                                 --parallel
-        )
-
-        add_dependencies(yaml-cpp yaml-cpp_install)
-        message(STATUS
-            "Installing yaml-cpp: ${yaml-cpp_LIBRARY} (version \"${yaml-cpp_VERSION}\")"
-        )
-    endif()
-endif()
-
-###############################################################################
-### Configure target ###
-
-if(_yaml-cpp_TARGET_CREATE)
-    set_target_properties(yaml-cpp PROPERTIES
+if (yaml-cpp_FOUND AND NOT TARGET yaml-cpp::yaml-cpp)
+    add_library(yaml-cpp::yaml-cpp UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(yaml-cpp::yaml-cpp PROPERTIES
         IMPORTED_LOCATION ${yaml-cpp_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES ${yaml-cpp_INCLUDE_DIR}
     )
 
-    mark_as_advanced(yaml-cpp_INCLUDE_DIR yaml-cpp_LIBRARY yaml-cpp_VERSION)
-endif()
+    # Required because Installyaml-cpp.cmake creates `yaml-cpp::yaml-cpp`
+    # as an alias, and aliases get resolved in exported targets, causing the
+    # find_dependency(yaml-cpp) call in OpenColorIOConfig.cmake to fail.
+    # This can be removed once Installyaml-cpp.cmake targets yaml-cpp 0.8.
+    if (NOT TARGET yaml-cpp)
+        add_library(yaml-cpp ALIAS yaml-cpp::yaml-cpp)
+    endif ()
+endif ()
+
+if (yaml-cpp_FOUND)
+    # TODO: Remove this variable and use the `yaml-cpp::yaml-cpp` target
+    # directly when the minimum version of yaml-cpp is updated to 0.8.
+    get_target_property(YAML_CPP_INCLUDE_DIR yaml-cpp::yaml-cpp INCLUDE_DIRECTORIES)
+    set(YAML_CPP_LIBRARIES yaml-cpp::yaml-cpp)
+endif ()

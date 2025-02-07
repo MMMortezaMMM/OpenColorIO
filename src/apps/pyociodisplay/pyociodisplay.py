@@ -11,11 +11,10 @@ import ctypes
 import logging
 import sys
 
-from PySide2 import QtCore, QtGui, QtWidgets, QtOpenGL
+from PySide6 import QtCore, QtGui, QtWidgets, QtOpenGL
 from OpenGL import GL
 import PyOpenColorIO as ocio
 import OpenImageIO as oiio
-import imath
 import numpy as np
 
 
@@ -806,7 +805,7 @@ class ImagePlane(QtOpenGL.QGLWidget):
             tex = GL.glGenTextures(1)
             GL.glActiveTexture(GL.GL_TEXTURE0 + tex_index)
 
-            if tex_info.height > 1:
+            if tex_info.dimensions == self._ocio_shader_desc.TEXTURE_2D:
                 tex_type = GL.GL_TEXTURE_2D
                 GL.glBindTexture(tex_type, tex)
                 self._set_ocio_tex_params(tex_type, tex_info.interpolation)
@@ -1337,7 +1336,7 @@ class ImageView(QtWidgets.QWidget):
         self.image_plane.update_gamma(value)
 
 
-if __name__ == "__main__":
+def main():
     # OpenGL core profile needed on macOS to access programmatic pipeline
     gl_format = QtOpenGL.QGLFormat()
     gl_format.setProfile(QtOpenGL.QGLFormat.CoreProfile)
@@ -1350,3 +1349,7 @@ if __name__ == "__main__":
     viewer = ImageView()
     viewer.show()
     app.exec_()
+
+
+if __name__ == "__main__":
+    main()

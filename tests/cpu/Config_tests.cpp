@@ -1,13 +1,13 @@
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License-Identifer: BSD-3-Clause
 // Copyright Contributors to the OpenColorIO Project.
 
 
 #include <sys/stat.h>
 
-#include "Config.cpp"
-#include "utils/StringUtils.h"
+#include <pystring.h>
 
-#include <pystring/pystring.h>
+#include "Config.cpp"
+
 #include "testutils/UnitTest.h"
 #include "UnitTestLogUtils.h"
 #include "UnitTestUtils.h"
@@ -312,6 +312,16 @@ OCIO_ADD_TEST(Config, roles)
 
     OCIO_CHECK_EQUAL(std::string(config->getRoleName(-4)), "");
     OCIO_CHECK_EQUAL(std::string(config->getRoleColorSpace(-4)), "");
+
+    // Test existing roles.
+    OCIO_CHECK_EQUAL(std::string(config->getRoleColorSpace("scene_linear")), std::string("lnh"));
+    OCIO_CHECK_EQUAL(std::string(config->getRoleColorSpace("compositing_log")), std::string("lgh"));
+
+    // Test a unknown role.
+    OCIO_CHECK_EQUAL(std::string(config->getRoleColorSpace("wrong_role")), std::string(""));
+
+    // Test an empty input.
+    OCIO_CHECK_EQUAL(std::string(config->getRoleColorSpace("")), std::string(""));
 }
 
 OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
@@ -357,51 +367,19 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
     }
     
     {
-        // Test that all errors appears when all required roles are missing.
+        // Test that all errors appear when all required roles are missing.
 
         OCIO::LogGuard logGuard;
         OCIO_CHECK_NO_THROW(config->validate());
-
-        StringUtils::StringVec svec = StringUtils::SplitByLines(logGuard.output());
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-                svec, 
-                "[OpenColorIO Error]: The scene_linear role is required for a config version 2.2 "\
-                "or higher."
-            )
-        );
-
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-                svec, 
-                "[OpenColorIO Error]: The compositing_log role is required for a config version "\
-                "2.2 or higher."
-            )
-        );
-
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-                svec, 
-                "[OpenColorIO Error]: The color_timing role is required for a config version 2.2 "\
-                "or higher."
-            )
-        );
-
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-                svec, 
-                "[OpenColorIO Error]: The aces_interchange role is required when there are "\
-                "scene-referred color spaces and the config version is 2.2 or higher."
-            )
-        );
-
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-                svec, 
-                "[OpenColorIO Error]: The cie_xyz_d65_interchange role is required when there are"\
-                " display-referred color spaces and the config version is 2.2 or higher."
-            )
-        );
+        // Check that the log contains the expected error messages for the missing roles and mute 
+        // them so that (only) those messages don't appear in the test output.
+        OCIO_CHECK_ASSERT(OCIO::checkAndMuteSceneLinearRoleError(logGuard));
+        OCIO_CHECK_ASSERT(OCIO::checkAndMuteCompositingLogRoleError(logGuard));
+        OCIO_CHECK_ASSERT(OCIO::checkAndMuteColorTimingRoleError(logGuard));
+        OCIO_CHECK_ASSERT(OCIO::checkAndMuteAcesInterchangeRoleError(logGuard));
+        OCIO_CHECK_ASSERT(OCIO::checkAndMuteDisplayInterchangeRoleError(logGuard));
+        // If there are any unexpected log messages, print them to the shell.
+        logGuard.print();
     }
     
     // Set colorspace for all required roles.
@@ -416,11 +394,7 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
 
         OCIO::LogGuard logGuard;
         OCIO_CHECK_NO_THROW(config->validate());
-
-        StringUtils::StringVec svec = StringUtils::SplitByLines(logGuard.output());
-        OCIO_CHECK_ASSERT(
-            !StringUtils::Contain(svec, "[OpenColorIO Error]")
-        );
+        OCIO_CHECK_ASSERT(logGuard.empty());
     }
     
     {
@@ -454,12 +428,7 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
         OCIO_CHECK_NO_THROW(config->validate());
 
         StringUtils::StringVec svec = StringUtils::SplitByLines(logGuard.output());
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-            svec, 
-            "[OpenColorIO Error]: The compositing_log role is required for a config version 2.2 "\
-            "or higher.")
-        );
+        checkAndMuteCompositingLogRoleError(logGuard);
 
         // Set compositing_log for next test.
         config->setRole(OCIO::ROLE_COMPOSITING_LOG, dcs->getName());
@@ -475,12 +444,7 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
         OCIO_CHECK_NO_THROW(config->validate());
 
         StringUtils::StringVec svec = StringUtils::SplitByLines(logGuard.output());
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-            svec, 
-            "[OpenColorIO Error]: The color_timing role is required for a config version 2.2 or "\
-            "higher.")
-        );
+        checkAndMuteColorTimingRoleError(logGuard);
 
         // Set color_timing for next test.
         config->setRole(OCIO::ROLE_COLOR_TIMING, dcs->getName());
@@ -494,13 +458,7 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
 
         OCIO::LogGuard logGuard;
         OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_ASSERT(
-            StringUtils::StartsWith(
-                logGuard.output(), 
-                "[OpenColorIO Error]: The aces_interchange role is required when there are "\
-                "scene-referred color spaces and the config version is 2.2 or higher."
-            )
-        );
+        OCIO::checkAndMuteAcesInterchangeRoleError(logGuard);
 
         // Set aces_interchange for next test.
         config->setRole(OCIO::ROLE_INTERCHANGE_SCENE, scs->getName());
@@ -514,21 +472,14 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
 
         OCIO::LogGuard logGuard;
         OCIO_CHECK_NO_THROW(config->validate());
-
-        StringUtils::StringVec svec = StringUtils::SplitByLines(logGuard.output());
-        OCIO_CHECK_ASSERT(
-            StringUtils::Contain(
-            svec, 
-            "[OpenColorIO Error]: The cie_xyz_d65_interchange role is required when there are "\
-            "display-referred color spaces and the config version is 2.2 or higher.")
-        );
+        OCIO::checkAndMuteDisplayInterchangeRoleError(logGuard);
 
         // Set cie_xyz_d65_interchange for next test.
         config->setRole(OCIO::ROLE_INTERCHANGE_DISPLAY, dcs->getName());
     }
 
     {
-        // Test that aces_interchange role has the wrong colorspace type.
+        // Test detection of the aces_interchange role having the wrong colorspace type.
 
         // Set a display-referred colorspace to both interchange roles.
         config->setRole(OCIO::ROLE_INTERCHANGE_SCENE, dcs->getName());
@@ -544,7 +495,7 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
     }
 
     {
-        // Test that cie_xyz_d65_interchange role has the wrong colorspace type.
+        // Test detection of the cie_xyz_d65_interchange role having the wrong colorspace type.
 
         // Set a scene-referred colorspace to both interchange roles.
         config->setRole(OCIO::ROLE_INTERCHANGE_SCENE, scs->getName());
@@ -574,8 +525,7 @@ OCIO_ADD_TEST(Config, required_roles_for_version_2_2)
 
         OCIO::LogGuard logGuard;
         OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_ASSERT(
-        StringUtils::StartsWith(logGuard.output(), ""));
+        OCIO_CHECK_ASSERT(logGuard.empty());
     }
 }
 
@@ -622,6 +572,7 @@ OCIO_ADD_TEST(Config, serialize_group_transform)
         config->setRole( OCIO::ROLE_COMPOSITING_LOG, cs->getName() );
     }
 
+    config->setVersion(2, 2);
     std::ostringstream os;
     config->serialize(os);
 
@@ -693,6 +644,7 @@ OCIO_ADD_TEST(Config, serialize_searchpath)
             cs->setName("default");
             cs->setIsData(true);
             config->addColorSpace(cs);
+            config->setVersion(2, 2);
         }
 
         std::ostringstream os;
@@ -813,6 +765,55 @@ OCIO_ADD_TEST(Config, serialize_searchpath)
         OCIO_CHECK_EQUAL(std::string(configRead->getSearchPath(1)), sp1);
         OCIO_CHECK_EQUAL(std::string(configRead->getSearchPath(2)), sp2);
         OCIO_CHECK_EQUAL(std::string(configRead->getSearchPath(3)), sp3);
+    }
+}
+
+OCIO_ADD_TEST(Config, serialize_environment)
+{
+    {
+        OCIO::ConfigRcPtr config = OCIO::Config::Create();
+        config->setMajorVersion(1);
+        config->setMinorVersion(0);
+
+        std::ostringstream os;
+        config->serialize(os);
+        StringUtils::StringVec osvec = StringUtils::SplitByLines(os.str());
+
+        // A v1 config does not write the environment section if it's empty.
+        const std::string expected{ "search_path: \"\"" };
+        OCIO_CHECK_EQUAL(osvec[2], expected);
+    }
+    {
+        OCIO::ConfigRcPtr config = OCIO::Config::Create();
+        config->setMajorVersion(2);
+        config->setMinorVersion(0);
+
+        std::ostringstream os;
+        config->serialize(os);
+        StringUtils::StringVec osvec = StringUtils::SplitByLines(os.str());
+
+        // A v2 config does write the environment section, even if it's empty.
+        const std::string expected1{ "environment:" };
+        const std::string expected2{ "  {}" };
+        OCIO_CHECK_EQUAL(osvec[2], expected1);
+        OCIO_CHECK_EQUAL(osvec[3], expected2);
+    }
+    {
+        OCIO::ConfigRcPtr config = OCIO::Config::Create();
+        config->setMajorVersion(1);
+        config->setMinorVersion(0);
+
+        config->addEnvironmentVar("SHOT", "0001");
+
+        std::ostringstream os;
+        config->serialize(os);
+        StringUtils::StringVec osvec = StringUtils::SplitByLines(os.str());
+
+        // A v1 config does write the environment section if it's not empty.
+        const std::string expected1{ "environment:" };
+        const std::string expected2{ "  SHOT: 0001" };
+        OCIO_CHECK_EQUAL(osvec[2], expected1);
+        OCIO_CHECK_EQUAL(osvec[3], expected2);
     }
 }
 
@@ -1392,7 +1393,7 @@ OCIO_ADD_TEST(Config, context_variable_with_sanity_check)
 
         OCIO_CHECK_THROW_WHAT(cfg->validate(),
                               OCIO::Exception,
-                              "The file Transform source cannot be resolved: '$CS2'.");
+                              "The file transform source cannot be resolved: '$CS2'.");
         OCIO_CHECK_THROW_WHAT(cfg->getProcessor("cs1", "disp1", "view1", OCIO::TRANSFORM_DIR_FORWARD),
                               OCIO::Exception,
                               "The specified file reference '$CS2' could not be located");
@@ -1404,16 +1405,23 @@ OCIO_ADD_TEST(Config, context_variable_with_sanity_check)
         // Several faulty cases for the 'search_path'.
 
         OCIO_CHECK_NO_THROW(cfg->clearSearchPaths());
+        OCIO_CHECK_THROW_WHAT(cfg->validate(),
+                              OCIO::Exception,
+                              "The search_path must not be empty if there are FileTransforms.");
+
+        OCIO_CHECK_NO_THROW(cfg->clearSearchPaths());
+        // NB: Not sure this is desirable, but setting a nullptr is the same as setting "".
+        // In this case, getNumSearchtPaths == 1, which is potentially confusing.
         OCIO_CHECK_NO_THROW(cfg->setSearchPath(nullptr));
         OCIO_CHECK_THROW_WHAT(cfg->validate(),
                               OCIO::Exception,
-                              "The search_path is empty");
+                              "The search_path must not be an empty string if there are FileTransforms.");
 
         OCIO_CHECK_NO_THROW(cfg->clearSearchPaths());
         OCIO_CHECK_NO_THROW(cfg->setSearchPath(""));
         OCIO_CHECK_THROW_WHAT(cfg->validate(),
                               OCIO::Exception,
-                              "The search_path is empty");
+                              "The search_path must not be an empty string if there are FileTransforms.");
 
         OCIO_CHECK_NO_THROW(cfg->clearSearchPaths());
         OCIO_CHECK_NO_THROW(cfg->setSearchPath("$MYPATH"));
@@ -1489,11 +1497,11 @@ OCIO_ADD_TEST(Config, context_variable_with_colorspacename)
         OCIO_CHECK_NO_THROW(cfg = OCIO::Config::CreateFromStream(iss)->createEditableCopy());
         OCIO_CHECK_THROW_WHAT(cfg->validate(),
                               OCIO::Exception,
-                              "The file Transform source cannot be resolved: '$VAR3'.");
+                              "The file transform source cannot be resolved: '$VAR3'.");
 
         // Set $VAR3 and check again.
 
-        OCIO_CHECK_NO_THROW(cfg->addEnvironmentVar("VAR3", "cs1"));
+        OCIO_CHECK_NO_THROW(cfg->addEnvironmentVar("VAR3", "file.clf"));
         OCIO_CHECK_NO_THROW(cfg->validate());
     }
 
@@ -1577,6 +1585,31 @@ OCIO_ADD_TEST(Config, context_variable_with_colorspacename)
         OCIO_CHECK_THROW_WHAT(cfg->getProcessor(ctx, "cs1", "cs2"),
                               OCIO::Exception,
                               "Color space '$VAR3' could not be found.");
+    }
+
+    // Repeat the test using a NamedTransform for one of the color spaces.
+
+    {
+        std::string configStr 
+            = std::string(CONFIG)
+            + "    from_scene_reference: !<ColorSpaceTransform> {src: $VAR3, dst: cs1}\n"
+            + "named_transforms:\n"
+            + "  - !<NamedTransform>\n"
+            + "    name: nt1\n"
+            + "    transform: !<RangeTransform> {min_in_value: 0, min_out_value: 0}\n";
+
+        std::istringstream iss;
+        iss.str(configStr);
+
+        OCIO::ConfigRcPtr cfg;
+        OCIO_CHECK_NO_THROW(cfg = OCIO::Config::CreateFromStream(iss)->createEditableCopy());
+
+        OCIO_CHECK_NO_THROW(cfg->addEnvironmentVar("VAR3", "nt1"));
+        OCIO_CHECK_NO_THROW(cfg->validate());
+
+        OCIO::ContextRcPtr ctx;
+        OCIO_CHECK_NO_THROW(ctx = cfg->getCurrentContext()->createEditableCopy());
+        OCIO_CHECK_NO_THROW(cfg->getProcessor(ctx, "cs1", "cs2"));
     }
 }
 
@@ -1672,7 +1705,7 @@ OCIO_ADD_TEST(Config, context_variable_with_display_view)
         OCIO_CHECK_THROW_WHAT(config->getProcessor("cs1", "disp1", "view1", OCIO::TRANSFORM_DIR_FORWARD),
                               OCIO::Exception,
                               "DisplayViewTransform error. Cannot find color space or "
-                              "named transform, named '$ENV1'.");
+                              "named transform with name '$ENV1'.");
     }
 }
 
@@ -1878,16 +1911,6 @@ OCIO_ADD_TEST(Config, context_variable_with_search_path_v2)
     }
 }
 
-OCIO_ADD_TEST(Config, role_without_colorspace)
-{
-    OCIO::ConfigRcPtr config = OCIO::Config::Create()->createEditableCopy();
-    config->setRole("reference", "UnknownColorSpace");
-
-    std::ostringstream os;
-    OCIO_CHECK_THROW_WHAT(config->serialize(os), OCIO::Exception,
-                          "Colorspace associated to the role 'reference', does not exist");
-}
-
 OCIO_ADD_TEST(Config, env_colorspace_name)
 {
     // Unset the env. variable to make sure the test start in the right environment.
@@ -2068,14 +2091,14 @@ OCIO_ADD_TEST(Config, version)
     }
 
     {
-        OCIO_CHECK_THROW_WHAT(config->setVersion(2, 3), OCIO::Exception,
-                              "The minor version 3 is not supported for major version 2. "
-                              "Maximum minor version is 2");
+        OCIO_CHECK_THROW_WHAT(config->setVersion(2, 9), OCIO::Exception,
+                              "The minor version 9 is not supported for major version 2. "
+                              "Maximum minor version is 4");
 
         OCIO_CHECK_NO_THROW(config->setMajorVersion(2));
-        OCIO_CHECK_THROW_WHAT(config->setMinorVersion(3), OCIO::Exception,
-                              "The minor version 3 is not supported for major version 2. "
-                              "Maximum minor version is 2");
+        OCIO_CHECK_THROW_WHAT(config->setMinorVersion(9), OCIO::Exception,
+                              "The minor version 9 is not supported for major version 2. "
+                              "Maximum minor version is 4");
     }
 
     {
@@ -2107,9 +2130,9 @@ OCIO_ADD_TEST(Config, version_validation)
 
     {
         std::istringstream is;
-        is.str("ocio_profile_version: 2.3\n" + SIMPLE_PROFILE_END);
+        is.str("ocio_profile_version: 2.9\n" + SIMPLE_PROFILE_END);
         OCIO_CHECK_THROW_WHAT(OCIO::Config::CreateFromStream(is), OCIO::Exception,
-                              "The minor version 3 is not supported for major version 2");
+                              "The minor version 9 is not supported for major version 2");
     }
 
     {
@@ -2149,6 +2172,22 @@ OCIO_ADD_TEST(Config, version_validation)
 
 namespace
 {
+// Generic profile header generator for given version
+template<int Major, int Minor>
+const std::string PROFILE_V()
+{
+    std::string s = std::string("ocio_profile_version: ")
+        + std::to_string(Major) + std::string(".") + std::to_string(Minor) + "\n";
+
+    if(Major>=2)
+    {
+        s = s + "\n"
+            "environment:\n"
+            "  {}\n";
+    }
+
+    return s;
+}
 
 const std::string PROFILE_V1 = 
     "ocio_profile_version: 1\n"
@@ -2172,6 +2211,19 @@ const std::string SIMPLE_PROFILE_A =
     "luma: [0.2126, 0.7152, 0.0722]\n"
     "\n"
     "roles:\n"
+    "  default: raw\n"
+    "  scene_linear: lnh\n"
+    "\n";
+
+const std::string SIMPLE_PROFILE_B =
+    "search_path: luts\n"
+    "strictparsing: true\n"
+    "luma: [0.2126, 0.7152, 0.0722]\n"
+    "\n"
+    "roles:\n"
+    "  aces_interchange: lnh\n"
+    "  color_timing: log\n"
+    "  compositing_log: log\n"
     "  default: raw\n"
     "  scene_linear: lnh\n"
     "\n";
@@ -2261,6 +2313,19 @@ const std::string PROFILE_V2_START = PROFILE_V2 + SIMPLE_PROFILE_A +
 
 const std::string PROFILE_V21_START = PROFILE_V21 + SIMPLE_PROFILE_A +
                                       DEFAULT_RULES + SIMPLE_PROFILE_B_V2;
+
+// Generic simple profile prolog for given major,minor version.
+template<int Major, int Minor>
+const std::string PROFILE_START_V()
+{
+    if(Major<=1)
+    {
+        return PROFILE_V<Major, Minor>() + SIMPLE_PROFILE_A + SIMPLE_PROFILE_B_V1;
+    }
+
+    return PROFILE_V<Major,Minor>() + SIMPLE_PROFILE_B + DEFAULT_RULES + SIMPLE_PROFILE_B_V2;
+}
+
 }
 
 OCIO_ADD_TEST(Config, serialize_colorspace_displayview_transforms)
@@ -4899,6 +4964,301 @@ OCIO_ADD_TEST(Config, fixed_function_serialization)
         OCIO_CHECK_THROW_WHAT(config = OCIO::Config::CreateFromStream(is), OCIO::Exception,
                               "'FixedFunctionTransform' parsing failed: style value is missing.");
     }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: Lin_TO_PQ}\n";
+
+        {
+            const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO_CHECK_THROW_WHAT(OCIO::Config::CreateFromStream(is), OCIO::Exception,
+                "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'Lin_TO_PQ'.");
+        }
+
+        {
+            const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO_CHECK_NO_THROW(OCIO::Config::CreateFromStream(is));
+        }
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: Lin_TO_GammaLog, params: [0.0, 0.25, 0.5, 1.0, 0.0, 2.718, 0.17883277, 0.807825590164, 1.0, -0.07116723]}\n";
+
+        {
+            const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO_CHECK_THROW_WHAT(OCIO::Config::CreateFromStream(is), OCIO::Exception,
+                "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'Lin_TO_GammaLog'.");
+        }
+
+        {
+            const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO_CHECK_NO_THROW(OCIO::Config::CreateFromStream(is));
+        }
+
+        {
+            const std::string str2End =
+                "    from_scene_reference: !<GroupTransform>\n"
+                "      children:\n"
+            "        - !<FixedFunctionTransform> {style: Lin_TO_GammaLog, params: [0.0, 0.25, 0.5, 1.0, 0.0, 2.718, 0.17, 0.80, 1.0]}\n";
+
+            const std::string str = PROFILE_START_V<2, 4>() + str2End;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO::ConstConfigRcPtr config;
+            OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+            OCIO_CHECK_THROW_WHAT(config->validate(), OCIO::Exception,
+                "The style 'Lin_TO_GammaLog' must have 10 parameters but 9 found.");
+        }
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: Lin_TO_DoubleLog, params: [10.0, 0.25, 0.5, -1.0, 0.0, -1.0, 1.25, 1.0, 1.0, 1.0, 0.5, 1.0, 0.0]}\n";
+
+        {
+            const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO_CHECK_THROW_WHAT(OCIO::Config::CreateFromStream(is), OCIO::Exception,
+                "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'Lin_TO_DoubleLog'.");
+        }
+
+        {
+            const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO_CHECK_NO_THROW(OCIO::Config::CreateFromStream(is));
+        }
+
+        {
+            const std::string str2End =
+                "    from_scene_reference: !<GroupTransform>\n"
+                "      children:\n"
+            "        - !<FixedFunctionTransform> {style: Lin_TO_DoubleLog, params: [10.0, 0.25, 0.5, -1.0, 0.0, -1.0, 1.25, 1.0, 1.0, 1.0, 0.5, 1.0]}\n";
+
+            const std::string str = PROFILE_START_V<2, 4>() + str2End;
+
+            std::istringstream is;
+            is.str(str);
+
+            OCIO::ConstConfigRcPtr config;
+            OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+            OCIO_CHECK_THROW_WHAT(config->validate(), OCIO::Exception,
+                "The style 'Lin_TO_DoubleLog' must have 13 parameters but 12 found.");
+        }
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_RGB_TO_JMh, params: [0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_RGB_TO_JMh, params: [0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_TonescaleCompress, params: [100]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_TonescaleCompress, params: [100], direction: inverse}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_GamutCompress, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_GamutCompress, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n";
+
+        const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+
+        {
+            OCIO::LogGuard log; // Mute the experimental warnings.
+
+            OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+            OCIO_CHECK_NO_THROW(config->validate());
+
+            std::string expectedLog = 
+R"([OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_OutputTransform'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_OutputTransform'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_RGB_TO_JMh'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_RGB_TO_JMh'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_TonescaleCompress'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_TonescaleCompress'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_GamutCompress'.
+[OpenColorIO Warning]: FixedFunction style is experimental and may be removed in a future release: 'ACES2_GamutCompress'.
+)";
+            OCIO_CHECK_EQUAL(log.output(), expectedLog);
+        }
+
+        {
+            OCIO::LogGuard log; // Mute the experimental warnings.
+
+            // Write the config.
+
+            std::stringstream ss;
+            OCIO_CHECK_NO_THROW(ss << *config.get());
+            OCIO_CHECK_EQUAL(ss.str(), str);
+        }
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n";
+
+        const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_THROW_WHAT(config = OCIO::Config::CreateFromStream(is), OCIO::Exception,
+            "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'ACES2_OutputTransform'.");
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_RGB_TO_JMh, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_RGB_TO_JMh, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n";
+
+        const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_THROW_WHAT(config = OCIO::Config::CreateFromStream(is), OCIO::Exception,
+            "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'ACES2_RGB_TO_JMh'.");
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_TonescaleCompress, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_TonescaleCompress, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n";
+
+        const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_THROW_WHAT(config = OCIO::Config::CreateFromStream(is), OCIO::Exception,
+            "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'ACES2_TonescaleCompress'.");
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_GamutCompress, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_GamutCompress, params: [100, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329], direction: inverse}\n";
+
+        const std::string str = PROFILE_START_V<2, 3>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_THROW_WHAT(config = OCIO::Config::CreateFromStream(is), OCIO::Exception,
+            "Only config version 2.4 (or higher) can have FixedFunctionTransform style 'ACES2_GamutCompress'.");
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: []}\n";
+
+        const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+        OCIO_CHECK_THROW_WHAT(config->validate(), OCIO::Exception,
+            "The style 'ACES_OutputTransform20 (Forward)' must have 9 parameters but 0 found.");
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: [-1, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n";
+
+        const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+        OCIO_CHECK_THROW_WHAT(config->validate(), OCIO::Exception,
+            "FixedFunctionTransform validation failed: Parameter -1 (peak_luminance) is outside valid range [1,10000]");
+    }
+
+    {
+        const std::string strEnd =
+            "    from_scene_reference: !<GroupTransform>\n"
+            "      children:\n"
+            "        - !<FixedFunctionTransform> {style: ACES2_OutputTransform, params: [100.5, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]}\n";
+
+        const std::string str = PROFILE_START_V<2, 4>() + strEnd;
+
+        OCIO::LogGuard log; // Mute the experimental warnings.
+
+        std::istringstream is;
+        is.str(str);
+
+        OCIO::ConstConfigRcPtr config;
+        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+        OCIO_CHECK_THROW_WHAT(config->validate(), OCIO::Exception,
+            "FixedFunctionTransform validation failed: Parameter 100.5 (peak_luminance) cannot include any fractional component");
+    }
 }
 
 OCIO_ADD_TEST(Config, exposure_contrast_serialization)
@@ -5268,7 +5628,7 @@ OCIO_ADD_TEST(Config, remove_color_space)
     // As discussed only validation traps the issue.
     OCIO_CHECK_THROW_WHAT(config->validate(),
                           OCIO::Exception,
-                          "Config failed validation. The role 'default' refers to"\
+                          "Config failed role validation. The role 'default' refers to"\
                           " a color space, 'raw', which is not defined.");
 }
 
@@ -5710,6 +6070,34 @@ OCIO_ADD_TEST(Config, inactive_color_space)
                                                       OCIO::COLORSPACE_ALL, 1));
 }
 
+OCIO_ADD_TEST(Config, is_inactive)
+{
+    // Using Built-in config to test the getInactiveColorSpace method.
+    const std::string cgConfigName = "studio-config-v1.0.0_aces-v1.3_ocio-v2.1";
+    OCIO::ConstConfigRcPtr config;
+
+    OCIO_CHECK_NO_THROW(
+        config = OCIO::Config::CreateFromBuiltinConfig(cgConfigName.c_str())
+    );
+    OCIO_REQUIRE_ASSERT(config);
+    OCIO_CHECK_NO_THROW(config->validate());
+
+    {
+        // Test various combinations of input.
+
+        OCIO_CHECK_EQUAL(config->isInactiveColorSpace(""), false);
+        OCIO_CHECK_EQUAL(config->isInactiveColorSpace("fake-colorspace-name"), false);
+
+        // Test existing colorspaces from cg-config-v1.0.0_aces-v1.3_ocio-v2.1. 
+
+        // Colorspace exists and is active.
+        OCIO_CHECK_EQUAL(config->isInactiveColorSpace("Linear P3-D65"), false);
+
+        // Colorspace exists and is inactive.
+        OCIO_CHECK_EQUAL(config->isInactiveColorSpace("Rec.1886 Rec.2020 - Display"), true);
+    }
+}
+
 OCIO_ADD_TEST(Config, inactive_color_space_precedence)
 {
     // The test demonstrates that an API request supersedes the env. variable and the
@@ -5906,7 +6294,7 @@ OCIO_ADD_TEST(Config, inactive_color_space_read_write)
             OCIO::LogGuard log;
             OCIO_CHECK_NO_THROW(config->validate());
             OCIO_CHECK_EQUAL(log.output(), 
-                             "[OpenColorIO Warning]: Inactive 'unknown' is neither a color "
+                             "[OpenColorIO Info]: Inactive 'unknown' is neither a color "
                              "space nor a named transform.\n");
         }
 
@@ -5920,7 +6308,7 @@ OCIO_ADD_TEST(Config, inactive_color_space_read_write)
     }
 }
 
-OCIO_ADD_TEST(Config, two_configs)
+OCIO_ADD_TEST(Config, get_processor_from_two_configs)
 {
     constexpr const char * SIMPLE_CONFIG1{ R"(
 ocio_profile_version: 2
@@ -5933,6 +6321,17 @@ roles:
   aces_interchange: aces1
   cie_xyz_d65_interchange: display1
 
+displays:
+  displayname:
+    - !<View> {name: view1, colorspace: displaytest1}
+    - !<View> {name: view2, view_transform: vt1, display_colorspace: display2}
+    - !<View> {name: view3, colorspace: data_space}
+
+view_transforms:
+  - !<ViewTransform>
+    name: vt1
+    from_scene_reference: !<RangeTransform> {min_in_value: 0., min_out_value: 0.}
+
 colorspaces:
   - !<ColorSpace>
     name: raw1
@@ -5944,9 +6343,18 @@ colorspaces:
     to_scene_reference: !<MatrixTransform> {offset: [0.01, 0.02, 0.03, 0]}
 
   - !<ColorSpace>
+    name: displaytest1
+    allocation: uniform
+    to_scene_reference: !<LogTransform> {base: 2}
+
+  - !<ColorSpace>
     name: aces1
     allocation: uniform
     from_scene_reference: !<ExponentTransform> {value: [1.101, 1.202, 1.303, 1.404]}
+
+  - !<ColorSpace>
+    name: data_space
+    isdata: true
 
 display_colorspaces:
   - !<ColorSpace>
@@ -6008,8 +6416,8 @@ display_colorspaces:
     is.str(SIMPLE_CONFIG2);
     OCIO_CHECK_NO_THROW(config2 = OCIO::Config::CreateFromStream(is));
 
+    // Just specify color spaces and have OCIO use the interchange roles.
     OCIO::ConstProcessorRcPtr p;
-    // NB: Although they have the same name, they are in different configs and are different ColorSpaces.
     OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(config1, "test1", config2, "test2"));
     OCIO_REQUIRE_ASSERT(p);
     auto group = p->createGroupTransform();
@@ -6031,7 +6439,6 @@ display_colorspaces:
     OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
         config1, "test1", "aces1", config2, "test2", "aces2"));
     OCIO_REQUIRE_ASSERT(p);
-    OCIO_REQUIRE_ASSERT(p);
     group = p->createGroupTransform();
     OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 4);
 
@@ -6039,14 +6446,12 @@ display_colorspaces:
     OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
         config1, "test1", OCIO::ROLE_INTERCHANGE_SCENE, config2, "test2", "aces2"));
     OCIO_REQUIRE_ASSERT(p);
-    OCIO_REQUIRE_ASSERT(p);
     group = p->createGroupTransform();
     OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 4);
 
     // Or color space can be specified using role.
     OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
         config1, "test1", OCIO::ROLE_INTERCHANGE_SCENE, config2, "test_role", "aces2"));
-    OCIO_REQUIRE_ASSERT(p);
     OCIO_REQUIRE_ASSERT(p);
     group = p->createGroupTransform();
     OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 4);
@@ -6069,10 +6474,106 @@ display_colorspaces:
     auto l3 = OCIO_DYNAMIC_POINTER_CAST<OCIO::LogTransform>(t3);
     OCIO_CHECK_ASSERT(l3);
 
-    OCIO_CHECK_THROW_WHAT(OCIO::Config::GetProcessorFromConfigs(config1, "display2", config2, "test2"),
+    // If one of the spaces is a data space, the whole result must be a no-op.
+    OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(config1, "data_space", config2, "test2"));
+    OCIO_REQUIRE_ASSERT(p);
+    group = p->createGroupTransform();
+    OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 0);
+
+    // Mixed Scene- and Display-referred interchange spaces.
+    OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(config1, "display2", config2, "test2"));
+    OCIO_REQUIRE_ASSERT(p);
+    group = p->createGroupTransform();
+    OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 5);
+    t0 = group->getTransform(0);
+    f0 = OCIO_DYNAMIC_POINTER_CAST<OCIO::FixedFunctionTransform>(t0);
+    OCIO_CHECK_ASSERT(f0);
+    t1 = group->getTransform(1);
+    auto r1 = OCIO_DYNAMIC_POINTER_CAST<OCIO::RangeTransform>(t1);
+    OCIO_CHECK_ASSERT(c1);
+    t2 = group->getTransform(2);
+    e2 = OCIO_DYNAMIC_POINTER_CAST<OCIO::ExponentTransform>(t2);
+    OCIO_CHECK_ASSERT(e2);
+    t3 = group->getTransform(3);
+    auto r3 = OCIO_DYNAMIC_POINTER_CAST<OCIO::RangeTransform>(t3);
+    OCIO_CHECK_ASSERT(r3);
+    auto t4 = group->getTransform(4);
+    auto m4 = OCIO_DYNAMIC_POINTER_CAST<OCIO::MatrixTransform>(t4);
+    OCIO_CHECK_ASSERT(m4);
+
+    // Second config has no view transform but is asked to connect a display color space to aces_interchange.
+    OCIO_CHECK_THROW_WHAT(OCIO::Config::GetProcessorFromConfigs(config1, "test1", config2, "display3"),
                           OCIO::Exception,
                           "There is no view transform between the main scene-referred space "
                           "and the display-referred space");
+
+
+    // Using the display-view getters
+    OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
+        config2, "test2", "aces2", config1, "displayname", "view1", "aces1", OCIO::TRANSFORM_DIR_FORWARD));
+    OCIO_REQUIRE_ASSERT(p);
+    group = p->createGroupTransform();
+    OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 4);
+    t0 = group->getTransform(0);
+    m0 = OCIO_DYNAMIC_POINTER_CAST<OCIO::MatrixTransform>(t0);
+    OCIO_CHECK_ASSERT(m0);
+    t1 = group->getTransform(1);
+    r1 = OCIO_DYNAMIC_POINTER_CAST<OCIO::RangeTransform>(t1);
+    OCIO_CHECK_ASSERT(r1);
+    t2 = group->getTransform(2);
+    e2 = OCIO_DYNAMIC_POINTER_CAST<OCIO::ExponentTransform>(t2);
+    OCIO_CHECK_ASSERT(e2);
+    t3 = group->getTransform(3);
+    l3 = OCIO_DYNAMIC_POINTER_CAST<OCIO::LogTransform>(t3);
+    OCIO_CHECK_ASSERT(l3);
+
+    // Inverse direction reverses the entire chain
+    OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
+        config2, "test2", "aces2", config1, "displayname", "view1", "aces1", OCIO::TRANSFORM_DIR_INVERSE));
+    OCIO_REQUIRE_ASSERT(p);
+    group = p->createGroupTransform();
+    OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 4);
+    t0 = group->getTransform(0);
+    auto l0 = OCIO_DYNAMIC_POINTER_CAST<OCIO::LogTransform>(t0);
+    OCIO_CHECK_ASSERT(l0);
+    t1 = group->getTransform(1);
+    e1 = OCIO_DYNAMIC_POINTER_CAST<OCIO::ExponentTransform>(t1);
+    OCIO_CHECK_ASSERT(e1);
+    t2 = group->getTransform(2);
+    r2 = OCIO_DYNAMIC_POINTER_CAST<OCIO::RangeTransform>(t2);
+    OCIO_CHECK_ASSERT(r2);
+    t3 = group->getTransform(3);
+    m3 = OCIO_DYNAMIC_POINTER_CAST<OCIO::MatrixTransform>(t3);
+    OCIO_CHECK_ASSERT(m3);
+
+    // Implicit interchange spaces, using the view transform
+    OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
+        config2, "test2", config1, "displayname", "view2", OCIO::TRANSFORM_DIR_FORWARD));
+    OCIO_REQUIRE_ASSERT(p);
+    group = p->createGroupTransform();
+    OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 5);
+    t0 = group->getTransform(0);
+    m0 = OCIO_DYNAMIC_POINTER_CAST<OCIO::MatrixTransform>(t0);
+    OCIO_CHECK_ASSERT(m0);
+    t1 = group->getTransform(1);
+    r1 = OCIO_DYNAMIC_POINTER_CAST<OCIO::RangeTransform>(t1);
+    OCIO_CHECK_ASSERT(r1);
+    t2 = group->getTransform(2);
+    e2 = OCIO_DYNAMIC_POINTER_CAST<OCIO::ExponentTransform>(t2);
+    OCIO_CHECK_ASSERT(e2);
+    t3 = group->getTransform(3);
+    r3 = OCIO_DYNAMIC_POINTER_CAST<OCIO::RangeTransform>(t3);
+    OCIO_CHECK_ASSERT(r3);
+    t4 = group->getTransform(4);
+    auto ff4 = OCIO_DYNAMIC_POINTER_CAST<OCIO::FixedFunctionTransform>(t4);
+    OCIO_CHECK_ASSERT(ff4);
+
+    // If one of the spaces is a data space, the whole result must be a no-op.
+    OCIO_CHECK_NO_THROW(p = OCIO::Config::GetProcessorFromConfigs(
+        config2, "test2", config1, "displayname", "view3", OCIO::TRANSFORM_DIR_FORWARD));
+    OCIO_REQUIRE_ASSERT(p);
+    group = p->createGroupTransform();
+    OCIO_REQUIRE_EQUAL(group->getNumTransforms(), 0);
 
     constexpr const char * SIMPLE_CONFIG3{ R"(
 ocio_profile_version: 2
@@ -6092,6 +6593,12 @@ colorspaces:
     name: test
     allocation: uniform
     from_scene_reference: !<MatrixTransform> {offset: [0.11, 0.12, 0.13, 0]}
+
+display_colorspaces:
+  - !<ColorSpace>
+    name: display5
+    allocation: uniform
+    from_display_reference: !<ExponentTransform> {value: 2.4}
 )" };
 
     is.clear();
@@ -6101,11 +6608,15 @@ colorspaces:
 
     OCIO_CHECK_THROW_WHAT(OCIO::Config::GetProcessorFromConfigs(config1, "test1", config3, "test"),
                           OCIO::Exception,
-                          "The role 'aces_interchange' is missing in the destination config");
+                          "The required role 'aces_interchange' is missing from the source and/or destination config.");
 
     OCIO_CHECK_THROW_WHAT(OCIO::Config::GetProcessorFromConfigs(config1, "display1", config3, "test"),
                           OCIO::Exception,
-                          "The role 'cie_xyz_d65_interchange' is missing in the destination config");
+                          "The required role 'aces_interchange' is missing from the source and/or destination config.");
+
+    OCIO_CHECK_THROW_WHAT(OCIO::Config::GetProcessorFromConfigs(config1, "display1", config3, "display5"),
+                          OCIO::Exception,
+                          "The required role 'cie_xyz_d65_interchange' is missing from the source and/or destination config.");
 }
 
 
@@ -6365,6 +6876,8 @@ OCIO_ADD_TEST(Config, display_view)
         config->addColorSpace(cs);
     }
 
+    config->setVersion(2, 1);
+
     // Add a scene-referred and a display-referred color space.
     auto cs = OCIO::ColorSpace::Create(OCIO::REFERENCE_SPACE_SCENE);
     cs->setName("scs");
@@ -6406,7 +6919,7 @@ OCIO_ADD_TEST(Config, display_view)
 
     std::stringstream os;
     os << *config.get();
-    constexpr char expected[]{ R"(ocio_profile_version: 2.2
+    constexpr char expected[]{ R"(ocio_profile_version: 2.1
 
 environment:
   {}
@@ -9017,191 +9530,6 @@ OCIO_ADD_TEST(Config, look_fallback)
 
         OCIO_CHECK_NO_THROW(proc = config->getProcessor("cs", "disp1", "view1", OCIO::TRANSFORM_DIR_FORWARD));
         OCIO_CHECK_ASSERT(proc->isNoOp());
-    }
-}
-
-OCIO_ADD_TEST(Config, create_builtin_config)
-{
-    // ********************************
-    // Testing CG config.
-    // ********************************
-    int numberOfExpectedColorspaces = 14;
-    const std::string cgConfigName = "cg-config-v1.0.0_aces-v1.3_ocio-v2.1";
-    const std::string cgConfigURI = std::string("ocio://") + cgConfigName;
-
-    {
-        // Testing CreateFromBuiltinConfig with a known built-in config name.
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(
-            config = OCIO::Config::CreateFromBuiltinConfig(cgConfigName.c_str())
-        );
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            cgConfigName
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), numberOfExpectedColorspaces);
-    }
-
-    {
-        // Testing CreateFromEnv with an known built-in config name using URI Syntax. 
-
-        OCIO::EnvironmentVariableGuard guard("OCIO", cgConfigURI);
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromEnv());
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            cgConfigName
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), numberOfExpectedColorspaces);
-    }
-
-    {
-        // Testing CreateFromFile with an known built-in config name using URI Syntax.
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(
-            config = OCIO::Config::CreateFromFile(cgConfigURI.c_str())
-        );
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            cgConfigName
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), numberOfExpectedColorspaces);
-    }
-
-    // ********************************
-    // Testing STUDIO config.
-    // ********************************
-    numberOfExpectedColorspaces = 39;
-    const std::string studioConfigName = "studio-config-v1.0.0_aces-v1.3_ocio-v2.1";
-    const std::string studioConfigURI = std::string("ocio://") + studioConfigName;
-
-    {
-        // Testing CreateFromBuiltinConfig with a known built-in config name.
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(
-            config = OCIO::Config::CreateFromBuiltinConfig(studioConfigName.c_str())
-        );
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            studioConfigName
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), numberOfExpectedColorspaces);
-    }
-
-    {
-        // Testing CreateFromEnv with an known built-in config name using URI Syntax. 
-
-        OCIO::EnvironmentVariableGuard guard("OCIO", studioConfigURI);
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromEnv());
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            studioConfigName
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), numberOfExpectedColorspaces);
-    }
-
-    {
-        // Testing CreateFromFile with an known built-in config name using URI Syntax.
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(
-            config = OCIO::Config::CreateFromFile(studioConfigURI.c_str())
-        );
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            studioConfigName
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), numberOfExpectedColorspaces);
-    }
-
-    // ********************************
-    // Testing default config.
-    // ********************************
-
-    {
-        // Testing CreateFromEnv with the default config using URI Syntax.
-
-        OCIO::EnvironmentVariableGuard guard("OCIO", "ocio://default");
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromEnv());
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            std::string("cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), 14);
-    }
-
-    {
-        // Testing CreateFromFile with the default config using URI Syntax.
-
-        OCIO::ConstConfigRcPtr config;
-        OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromFile("ocio://default"));
-        OCIO_REQUIRE_ASSERT(config);
-
-        OCIO_CHECK_NO_THROW(config->validate());
-        OCIO_CHECK_EQUAL(
-            std::string(config->getName()), 
-            std::string("cg-config-v1.0.0_aces-v1.3_ocio-v2.1")
-        );
-        OCIO_CHECK_EQUAL(config->getNumColorSpaces(), 14);
-    }
-
-    // ********************************
-    // Testing some expected failures.
-    // ********************************
-
-    // Testing CreateFromBuiltinConfig with an unknown built-in config name.
-    OCIO_CHECK_THROW_WHAT(
-        OCIO::Config::CreateFromBuiltinConfig("I-do-not-exist"),
-        OCIO::Exception,
-        "Could not find 'I-do-not-exist' in the built-in configurations."
-    );
-
-    // Testing CreateFromFile with an unknown built-in config name using URI syntax.
-    OCIO_CHECK_THROW_WHAT(
-        OCIO::Config::CreateFromFile("ocio://I-do-not-exist"),
-        OCIO::Exception,
-        "Could not find 'I-do-not-exist' in the built-in configurations."
-    );
-
-    {
-        // Testing CreateFromEnv with an unknown built-in config.
-
-        OCIO::EnvironmentVariableGuard guard("OCIO", "ocio://thedefault");
-
-        OCIO_CHECK_THROW_WHAT(
-            OCIO::Config::CreateFromEnv(),
-            OCIO::Exception,
-            "Could not find 'thedefault' in the built-in configurations."
-        );
     }
 }
 

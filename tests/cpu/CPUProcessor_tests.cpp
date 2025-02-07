@@ -13,6 +13,27 @@
 namespace OCIO = OCIO_NAMESPACE;
 
 
+OCIO_ADD_TEST(CPUProcessor, dynamic_properties)
+{
+    OCIO::ExposureContrastTransformRcPtr ec = OCIO::ExposureContrastTransform::Create();
+
+    ec->setExposure(1.2);
+    ec->setPivot(0.5);
+    ec->makeContrastDynamic();
+
+    OCIO::ConfigRcPtr config = OCIO::Config::Create();
+    auto cpuProc = config->getProcessor(ec)->getDefaultCPUProcessor();
+    OCIO_CHECK_ASSERT(cpuProc->isDynamic());
+    OCIO_CHECK_ASSERT(cpuProc->hasDynamicProperty(OCIO::DYNAMIC_PROPERTY_CONTRAST));
+    OCIO_CHECK_ASSERT(!cpuProc->hasDynamicProperty(OCIO::DYNAMIC_PROPERTY_EXPOSURE));
+    OCIO::DynamicPropertyRcPtr dpc;
+    OCIO_CHECK_NO_THROW(dpc = cpuProc->getDynamicProperty(OCIO::DYNAMIC_PROPERTY_CONTRAST));
+    OCIO_CHECK_ASSERT(dpc);
+    OCIO_CHECK_THROW_WHAT(cpuProc->getDynamicProperty(OCIO::DYNAMIC_PROPERTY_EXPOSURE),
+                          OCIO::Exception,
+                          "Cannot find dynamic property; not used by CPU processor.");
+}
+
 OCIO_ADD_TEST(CPUProcessor, flag_composition)
 {
     // The test validates the build of a custom optimization flag.
@@ -814,6 +835,9 @@ OCIO_ADD_TEST(CPUProcessor, with_several_ops)
                                                         &resImg[0],  OCIO::CHANNEL_ORDERING_RGBA,
                                                         NB_PIXELS, 1e-7f);
 
+            // SSE2/AVX/AVX2 generate a slightly different LUT1D
+            // floating error below the absErrorThreshold, but cacheID hash will be different
+
             const std::string cacheID{ cpuProcessor->getCacheID() };
 
             const std::string expectedID("CPU Processor: from 16ui to 32f oFlags 263995331 ops"
@@ -821,7 +845,26 @@ OCIO_ADD_TEST(CPUProcessor, with_several_ops)
 
             // Test integer optimization. The ops should be optimized into a single LUT
             // when finalizing with an integer input bit-depth.
-            OCIO_CHECK_EQUAL(cacheID, expectedID);
+            OCIO_CHECK_EQUAL(cacheID.length(), expectedID.length());
+
+            // check everything but the cacheID hash
+            const std::vector<std::string> toCheck = {
+                "CPU Processor: from 16ui to 32f oFlags 263995331 ops:",
+                "<Lut1D",
+                "forward default standard domain none>" };
+
+            for (unsigned int i = 0; i < toCheck.size(); ++i)
+            {
+                size_t count = 0;
+                size_t nPos = cacheID.find(toCheck[i], 0);
+                while (nPos != std::string::npos)
+                {
+                    count++;
+                    nPos = cacheID.find(toCheck[i], nPos + 1);
+                }
+
+                OCIO_CHECK_EQUAL(count, 1);
+            }
         }
 
         {
@@ -2729,14 +2772,27 @@ void ComputeImage(unsigned width, unsigned height, unsigned nChannels,
     for(size_t idx=0; idx<(width*height);)
     {
         // Manual computation of the results.
+        // Break operations into steps similar to cpu processor
+        // to avoid potential fma compiler optimizations
+        const float in_scale[4]{ float(inValues[idx+0]) * inScale,
+                                 float(inValues[idx+1]) * inScale,
+                                 float(inValues[idx+2]) * inScale,
+                                 nChannels==4
+                                     ? float(inValues[idx+3]) * inScale
+                                     : 0.0f
+                                };
 
-        const float pxl[4]{ (float(inValues[idx+0]) * inScale + (float)offset4[0]) * outScale,
-                            (float(inValues[idx+1]) * inScale + (float)offset4[1]) * outScale,
-                            (float(inValues[idx+2]) * inScale + (float)offset4[2]) * outScale,
-                            nChannels==4
-                                ? ((float(inValues[idx+3]) * inScale + (float)offset4[3]) * outScale)
-                                : 0.0f
-                          };
+        const float operation[4]{ in_scale[0] + (float)offset4[0],
+                                  in_scale[1] + (float)offset4[1],
+                                  in_scale[2] + (float)offset4[2],
+                                  in_scale[3] + (float)offset4[3],
+                                };
+
+        const float pxl[4]{ operation[0] * outScale,
+                            operation[1] * outScale,
+                            operation[2] * outScale,
+                            operation[3] * outScale,
+                      };
 
         // Validate all the results.
 

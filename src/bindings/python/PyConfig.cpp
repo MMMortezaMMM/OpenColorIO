@@ -334,6 +334,38 @@ void bindPyConfig(py::module & m)
              DOC(Config, setInactiveColorSpaces))
         .def("getInactiveColorSpaces", &Config::getInactiveColorSpaces, 
              DOC(Config, getInactiveColorSpaces))
+        .def("isInactiveColorSpace", &Config::isInactiveColorSpace, "colorspace"_a,
+             DOC(Config, isInactiveColorSpace))      
+        .def_static("IdentifyBuiltinColorSpace", [](const ConstConfigRcPtr & srcConfig,
+                                                    const ConstConfigRcPtr & builtinConfig,
+                                                    const char * builtinColorSpaceName)
+            {
+                return Config::IdentifyBuiltinColorSpace(srcConfig,
+                                                         builtinConfig,
+                                                         builtinColorSpaceName);
+            },
+                    "srcConfig"_a, "builtinConfig"_a, "builtinColorSpaceName"_a,
+                    DOC(Config, IdentifyBuiltinColorSpace))
+
+        .def_static("IdentifyInterchangeSpace", [](const ConstConfigRcPtr & srcConfig,
+                                                   const char * srcColorSpaceName,
+                                                   const ConstConfigRcPtr & builtinConfig,
+                                                   const char * builtinColorSpaceName)
+            {
+                const char * srcInterchangePtr = nullptr;
+                const char * builtinInterchangePtr = nullptr;
+
+                Config::IdentifyInterchangeSpace(&srcInterchangePtr,
+                                                 &builtinInterchangePtr,
+                                                 srcConfig,
+                                                 srcColorSpaceName,
+                                                 builtinConfig,
+                                                 builtinColorSpaceName);
+                // Return the tuple by value which copies the strings values.
+                return std::make_tuple(std::string(srcInterchangePtr), std::string(builtinInterchangePtr));
+            },
+                "srcConfig"_a, "srcColorSpaceName"_a, "builtinConfig"_a, "builtinColorSpaceName"_a,
+                DOC(Config, IdentifyInterchangeSpace))
 
         // Roles
         .def("setRole", &Config::setRole, "role"_a, "colorSpaceName"_a, 
@@ -348,6 +380,10 @@ void bindPyConfig(py::module & m)
             { 
                 return RoleColorSpaceIterator(self); 
             })
+        .def("getRoleColorSpace", 
+             (const char * (Config::*)(const char *) const) &Config::getRoleColorSpace, 
+             "roleName"_a,
+             DOC(Config, getRoleColorSpace)) 
 
         // Display/View Registration
         .def("addSharedView",
@@ -775,7 +811,82 @@ void bindPyConfig(py::module & m)
                     "srcContext"_a, "srcConfig"_a, "srcColorSpaceName"_a, "srcInterchangeName"_a, 
                     "dstContext"_a, "dstConfig"_a, "dstColorSpaceName"_a, "dstInterchangeName"_a, 
                     DOC(Config, GetProcessorFromConfigs, 4))
+        .def_static("GetProcessorFromConfigs", [](const ConstConfigRcPtr & srcConfig,
+                                                  const char * srcColorSpaceName,
+                                                  const ConstConfigRcPtr & dstConfig,
+                                                  const char * dstDisplay,
+                                                  const char * dstView,
+                                                  TransformDirection direction)
+            {
+                return Config::GetProcessorFromConfigs(srcConfig, srcColorSpaceName,
+                                                       dstConfig, dstDisplay, dstView, direction);
+            },
+                    "srcConfig"_a, "srcColorSpaceName"_a, "dstConfig"_a, "dstDisplay"_a, "dstView"_a, "direction"_a,
+                    DOC(Config, GetProcessorFromConfigs, 5))
+        .def_static("GetProcessorFromConfigs", [](const ConstContextRcPtr & srcContext,
+                                                  const ConstConfigRcPtr & srcConfig,
+                                                  const char * srcColorSpaceName,
+                                                  const ConstContextRcPtr & dstContext,
+                                                  const ConstConfigRcPtr & dstConfig,
+                                                  const char * dstDisplay,
+                                                  const char * dstView,
+                                                  TransformDirection direction)
+            {
+                return Config::GetProcessorFromConfigs(srcContext, srcConfig, srcColorSpaceName,
+                                                       dstContext, dstConfig, dstDisplay, dstView, direction);
+            },
+                    "srcContext"_a, "srcConfig"_a, "srcColorSpaceName"_a,
+                    "dstContext"_a, "dstConfig"_a, "dstView"_a, "dstDisplay"_a, "direction"_a,
+                    DOC(Config, GetProcessorFromConfigs, 6))
+        .def_static("GetProcessorFromConfigs", [](const ConstConfigRcPtr & srcConfig,
+                                                  const char * srcColorSpaceName,
+                                                  const char * srcInterchangeName,
+                                                  const ConstConfigRcPtr & dstConfig,
+                                                  const char * dstDisplay,
+                                                  const char * dstView,
+                                                  const char * dstInterchangeName,
+                                                  TransformDirection direction)
+            {
+                return Config::GetProcessorFromConfigs(srcConfig,
+                                                       srcColorSpaceName,
+                                                       srcInterchangeName,
+                                                       dstConfig,
+                                                       dstDisplay,
+                                                       dstView,
+                                                       dstInterchangeName,
+                                                       direction);
+            },
+                    "srcConfig"_a, "srcColorSpaceName"_a, "srcInterchangeName"_a,
+                    "dstConfig"_a, "dstDisplay"_a, "dstView"_a, "dstInterchangeName"_a, "direction"_a,
+                    DOC(Config, GetProcessorFromConfigs, 7))
+        .def_static("GetProcessorFromConfigs", [](const ConstContextRcPtr & srcContext,
+                                                  const ConstConfigRcPtr & srcConfig,
+                                                  const char * srcColorSpaceName,
+                                                  const char * srcInterchangeName,
+                                                  const ConstContextRcPtr & dstContext,
+                                                  const ConstConfigRcPtr & dstConfig,
+                                                  const char * dstDisplay,
+                                                  const char * dstView,
+                                                  const char * dstInterchangeName,
+                                                  TransformDirection direction)
+            {
+                return Config::GetProcessorFromConfigs(srcContext,
+                                                       srcConfig,
+                                                       srcColorSpaceName,
+                                                       srcInterchangeName,
+                                                       dstContext,
+                                                       dstConfig,
+                                                       dstDisplay,
+                                                       dstView,
+                                                       dstInterchangeName,
+                                                       direction);
+            },
+                    "srcContext"_a, "srcConfig"_a, "srcColorSpaceName"_a, "srcInterchangeName"_a,
+                    "dstContext"_a, "dstConfig"_a, "dstDisplay"_a, "dstView"_a, "dstInterchangeName"_a, "direction"_a,
+                    DOC(Config, GetProcessorFromConfigs, 8))
         .def("setProcessorCacheFlags", &Config::setProcessorCacheFlags, "flags"_a, 
+             DOC(Config, setProcessorCacheFlags))
+        .def("clearProcessorCache", &Config::clearProcessorCache, 
              DOC(Config, setProcessorCacheFlags))
 
         // Archiving
@@ -1269,6 +1380,9 @@ void bindPyConfig(py::module & m)
 
     m.def("ExtractOCIOZArchive", &ExtractOCIOZArchive, 
           DOC(PyOpenColorIO, ExtractOCIOZArchive));
+
+    m.def("ResolveConfigPath", &ResolveConfigPath, 
+          DOC(PyOpenColorIO, ResolveConfigPath));
 }
 
 } // namespace OCIO_NAMESPACE

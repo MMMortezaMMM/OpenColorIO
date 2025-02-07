@@ -5,13 +5,14 @@
 ###############################################################################
 # CMake definition.
 
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.14)
 
 set(CMAKE_MODULE_PATH
     ${CMAKE_MODULE_PATH}
-    ${CMAKE_SOURCE_DIR}/share/cmake/utils
-    ${CMAKE_SOURCE_DIR}/share/cmake/macros
-    ${CMAKE_SOURCE_DIR}/share/cmake/modules
+    ${CMAKE_CURRENT_SOURCE_DIR}/share/cmake/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/share/cmake/macros
+    ${CMAKE_CURRENT_SOURCE_DIR}/share/cmake/modules
+    ${CMAKE_CURRENT_SOURCE_DIR}/share/cmake/modules/install
 )
 
 set(CMAKE_WARN_DEPRECATED ON)
@@ -28,7 +29,7 @@ endif()
 # Project definition.
 
 project(OpenColorIO 
-    VERSION 2.3.0
+    VERSION 2.5.0
     DESCRIPTION "OpenColorIO (OCIO) is a complete color management solution"
     HOMEPAGE_URL https://github.com/AcademySoftwareFoundation/OpenColorIO
     LANGUAGES CXX C)
@@ -55,7 +56,7 @@ include(GNUInstallDirs)
 ###############################################################################
 # Forbid in-source build.
 
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
     message(FATAL_ERROR 
             "In-source build not allowed. Please make a new sub-directory and run cmake from there.")
 endif()
@@ -156,6 +157,11 @@ if (WIN32)
     option(OCIO_USE_WINDOWS_UNICODE "Compile with Windows Unicode support" ON)
 endif()
 
+###############################################################################
+# Other preferences
+
+option(OCIO_VERBOSE "Display more information when searching or installing dependencies" OFF)
+option(OCIO_USE_SOVERSION "Enable versioning in OCIO shared library name" ON)
 
 ###############################################################################
 # Warnings / debugging settings
@@ -169,23 +175,180 @@ endif()
 
 ###############################################################################
 # Optimization / internal linking preferences
-
-option(OCIO_USE_SSE "Specify whether to enable SSE CPU performance optimizations" ON)
-option(OCIO_USE_OIIO_CMAKE_CONFIG "Specify whether to look for OIIO using the generated CMake Config script instead of the custom FindOpenImageIO.cmake script" OFF)
+option(OCIO_USE_SIMD "Specify whether to enable SIMD CPU performance optimizations" ON)
 option(OCIO_USE_OIIO_FOR_APPS "Request OIIO to build apps (ociolutimage, ocioconvert and ociodisplay), the default uses OpenEXR." OFF)
+
+
+if (NOT APPLE)
+    if("${CMAKE_GENERATOR_PLATFORM}" MATCHES "(ARM64|arm64)" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
+        set(OCIO_ARCH_X86 0)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX OFF)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C OFF)
+    elseif ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "(AMD64|IA64|EM64T|x86_64|X86|i386|i686)")
+        # Intel-based architecture (not APPLE)
+        if ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "(X86|i386|i686)")
+            set(OCIO_ARCH_X86_32 1)
+        endif()
+        set(OCIO_ARCH_X86 1)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX ON)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C ON)
+    else()
+        set(OCIO_ARCH_X86 0)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE OFF)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX OFF)
+        set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C OFF)
+    endif()
+elseif (APPLE)
+    # Multiple possible scenarios:
+    # A. Building on an Apple arm64 architecture for the native architecture (arm64).
+    # B. Building on an Apple arm64 architecture for x86_64.
+    # C. Building on an Apple arm64 architecture for universal binaries (x86_64 + arm64).
+    #
+    # D. Building on an Apple Intel architecture for the native architecture (x86_64).
+    # E. Building on an Apple Intel architecture for arm64.
+    # F. Building on an Apple Intel architecture for universal binaries (x86_64 + arm64).
+
+    # Check if we are NOT cross-compiling to another Apple architecture.
+    if (NOT DEFINED CMAKE_OSX_ARCHITECTURES OR CMAKE_OSX_ARCHITECTURES STREQUAL "")
+        # Building for the native architectures.
+        if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
+            # Apple Intel-based computer or Rosetta. (covers case D)
+
+            set(OCIO_ARCH_X86 1)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+            # The AVX and F16C will be compiled, but it won't used at runtime by Rosetta.
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX ON)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C ON)
+        elseif ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "arm64")
+            # Apple arm64. (covers case A)
+
+            set(OCIO_ARCH_X86 0)
+            # OCIO translates the SSE instructions into ARM Neon with the library SSE2NEON.
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+            # OCIO does not translate AVX to ARM Neon.
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX OFF)
+            # Turn F16C off since they are x86_64 instructions.
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C OFF)
+        endif()
+    else()
+        # Cross-compiling to another Apple architecture (x86_64, arm64, or both (universal))
+        if ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64")
+            # Compiling for x86_64 regardless of native architecture.
+            # Covers case B assuming CMAKE_SYSTEM_PROCESSOR is arm64.
+            # Covers case D if CMAKE_OSX_ARCHITECTURES is set to x86_64 on x86_64 architecture.
+
+            set(OCIO_ARCH_X86 1)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+            # The AVX and F16C will be compiled, but they won't used at runtime by Rosetta.
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX ON)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C ON)
+        elseif ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+            # Compiling for arm64 regardless of native architecture.
+            # Covers case E assuming CMAKE_SYSTEM_PROCESSOR is x86_64.
+            # Covers case A if CMAKE_OSX_ARCHITECTURES is set arm64 on arm64 architecture.
+
+            set(OCIO_ARCH_X86 0)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX OFF)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C OFF)
+        elseif ("${CMAKE_OSX_ARCHITECTURES}" MATCHES "(arm64;x86_64|x86_64;arm64)")
+            # Universal build (covers case C and F).
+
+            set(OCIO_ARCH_X86 1)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE ON)
+            # The AVX and F16C will be compiled, but they won't used at runtime by Rosetta.
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX ON)
+            set(OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C ON)
+        endif()
+    endif()
+endif()
+
+option(OCIO_USE_SSE2 "Specify whether to enable SSE2 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE})
+option(OCIO_USE_SSE3 "Specify whether to enable SSE3 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE})
+option(OCIO_USE_SSSE3 "Specify whether to enable SSSE3 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE})
+option(OCIO_USE_SSE4 "Specify whether to enable SSE4 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE})
+option(OCIO_USE_SSE42 "Specify whether to enable SSE4.2 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_SSE})
+option(OCIO_USE_AVX "Specify whether to enable AVX CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX})
+option(OCIO_USE_AVX2 "Specify whether to enable AVX2 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX})
+option(OCIO_USE_AVX512 "Specify whether to enable AVX512 CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_AVX})
+option(OCIO_USE_F16C  "Specify whether to enable F16C CPU performance optimizations" ${OCIO_BUILD_ENABLE_OPTIMIZATIONS_F16C})
+
+if (APPLE OR WIN32)
+   # TODO: Revisit whether that option is necessary.
+   option(OCIO_USE_SSE2NEON "Specify whether to enable SSE CPU performance optimizations using SSE2NEON for Apple ARM architecture" ON)
+   mark_as_advanced(OCIO_USE_SSE2NEON)
+endif()
 
 
 ###############################################################################
 # GPU configuration
-
+message(STATUS "")
+message(STATUS "Checking for GPU configuration...")
 include(CheckSupportGL)
+
+
+###############################################################################
+# Check for ARM neon here because we need to know if ARM NEON is supported
+# quickly. Once we know that ARM NEON is supported, we can add sse2neon library
+# to the build.
+
+if(OCIO_USE_SIMD)
+    include(CheckSupportARMNeon)
+
+    if (NOT COMPILER_SUPPORTS_ARM_NEON)
+        # Force it to OFF since ARM Neon is not supported.
+        set(OCIO_USE_SSE2NEON OFF)
+    endif()
+endif()
+
+
+###############################################################################
+# Add sse2neon to the build if ARM NEON intrinsics are supported.
+
+if(OCIO_USE_SIMD AND OCIO_USE_SSE2NEON AND COMPILER_SUPPORTS_ARM_NEON)
+    # Install sse2neon. Please note that sse2neon is downloaded during the configure step as it is
+    # needed for CompilerFlags.cmake and CheckSupportSSEUsingSSE2NEON.cmake.
+
+    # Sse2neon is not treated like an imported target. The logic to find sse2neon is here because 
+    # a find module is not suitable for sse2neon's use case.
+    find_path(sse2neon_INCLUDE_DIR
+        NAMES
+            sse2neon.h
+        HINTS
+            ${sse2neon_ROOT}
+        PATH_SUFFIXES
+            sse2neon
+            include
+            sse2neon/include
+    )
+
+    # As per instructions on sse2neon's GitHub page, the following compiler flags should be used:
+    # "-march=armv8-a+fp+simd+crypto+crc". These flags are required for some ARM platforms that do
+    # not enable floating point calculations or SIMD instructions by default. However, for ARM64
+    # (Apple ARM platform) and x86_64 platforms, these features are already enabled by default.
+    # Therefore, no additional compiler flags are needed.
+    if (NOT sse2neon_INCLUDE_DIR)
+        include(Installsse2neon)
+    else()
+        # Any changes to the following lines must be replicated in Installsse2neon.cmake as well.
+        # Create a target for sse2neon (non-imported)
+        add_library(sse2neon INTERFACE)
+        # Add the include directories to the target.
+        target_include_directories(sse2neon INTERFACE "${sse2neon_INCLUDE_DIR}")
+        if(NOT MSVC)
+            # Ignore the warnings coming from sse2neon.h as they are false positives.
+            target_compile_options(sse2neon INTERFACE -Wno-unused-parameter)
+        endif()
+    endif()
+endif()
 
 
 ###############################################################################
 # Define compilation and link flags
 
 include(CompilerFlags)
-
 
 ###############################################################################
 # External linking options
@@ -314,7 +477,7 @@ else()
     set(OCIO_SETUP_NAME setup_ocio.sh)
 endif()
 
-configure_file(${CMAKE_SOURCE_DIR}/share/ocio/${OCIO_SETUP_NAME}.in
+configure_file(${PROJECT_SOURCE_DIR}/share/ocio/${OCIO_SETUP_NAME}.in
     ${CMAKE_CURRENT_BINARY_DIR}/share/ocio/${OCIO_SETUP_NAME} @ONLY)
 
 INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/share/ocio/${OCIO_SETUP_NAME} DESTINATION ${CMAKE_INSTALL_DATADIR}/ocio/)
@@ -328,8 +491,8 @@ INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/share/ocio/${OCIO_SETUP_NAME} DESTINAT
 include(CMakePackageConfigHelpers)
 
 set(OCIO_TARGETS_EXPORT_NAME "${PROJECT_NAME}Targets.cmake")
-set(OCIO_VERSION_CONFIG "${CMAKE_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
-set(OCIO_PROJECT_CONFIG "${CMAKE_BINARY_DIR}/${PROJECT_NAME}Config.cmake")
+set(OCIO_VERSION_CONFIG "${PROJECT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
+set(OCIO_PROJECT_CONFIG "${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake")
 set(OCIO_CONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
 set(OCIO_CUSTOM_FIND_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/OpenColorIO/cmake/modules")
 set(OCIO_CUSTOM_MACROS_MODULE_DIR "${CMAKE_INSTALL_PREFIX}/share/OpenColorIO/cmake/macros")

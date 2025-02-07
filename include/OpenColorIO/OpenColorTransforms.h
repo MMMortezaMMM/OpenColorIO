@@ -453,6 +453,8 @@ struct OCIOEXPORT GradingRGBM
     double m_master{ 0. };
 };
 
+extern OCIOEXPORT bool operator==(const GradingRGBM & lhs, const GradingRGBM & rhs);
+extern OCIOEXPORT bool operator!=(const GradingRGBM & lhs, const GradingRGBM & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingRGBM &);
 
 /// Grading primary values.
@@ -488,6 +490,8 @@ struct OCIOEXPORT GradingPrimary
     static double NoClampWhite();
 };
 
+extern OCIOEXPORT bool operator==(const GradingPrimary & lhs, const GradingPrimary & rhs);
+extern OCIOEXPORT bool operator!=(const GradingPrimary & lhs, const GradingPrimary & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingPrimary &);
 
 /// 2D control point used by \ref GradingBSplineCurve.
@@ -499,6 +503,8 @@ struct OCIOEXPORT GradingControlPoint
     float m_y{ 0.f };
 };
 
+extern OCIOEXPORT bool operator==(const GradingControlPoint & lhs, const GradingControlPoint & rhs);
+extern OCIOEXPORT bool operator!=(const GradingControlPoint & lhs, const GradingControlPoint & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingControlPoint &);
 
 /// A BSpline curve defined with \ref GradingControlPoint.
@@ -530,6 +536,8 @@ protected:
     GradingBSplineCurve() = default;
 };
 
+extern OCIOEXPORT bool operator==(const GradingBSplineCurve & lhs, const GradingBSplineCurve & rhs);
+extern OCIOEXPORT bool operator!=(const GradingBSplineCurve & lhs, const GradingBSplineCurve & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingBSplineCurve &);
 
 /**
@@ -559,6 +567,8 @@ protected:
     GradingRGBCurve() = default;
 };
 
+extern OCIOEXPORT bool operator==(const GradingRGBCurve & lhs, const GradingRGBCurve & rhs);
+extern OCIOEXPORT bool operator!=(const GradingRGBCurve & lhs, const GradingRGBCurve & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingRGBCurve &);
 
 /**
@@ -602,6 +612,8 @@ struct OCIOEXPORT GradingRGBMSW
     double m_width { 1. }; // Or pivot for shadows and highlights.
 };
 
+extern OCIOEXPORT bool operator==(const GradingRGBMSW & lhs, const GradingRGBMSW & rhs);
+extern OCIOEXPORT bool operator!=(const GradingRGBMSW & lhs, const GradingRGBMSW & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingRGBMSW &);
 
 /// Grading tone values.
@@ -641,6 +653,8 @@ struct OCIOEXPORT GradingTone
     double m_scontrast{ 1.0 };
 };
 
+extern OCIOEXPORT bool operator==(const GradingTone & lhs, const GradingTone & rhs);
+extern OCIOEXPORT bool operator!=(const GradingTone & lhs, const GradingTone & rhs);
 extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingTone &);
 
 /**
@@ -673,7 +687,7 @@ extern OCIOEXPORT std::ostream & operator<<(std::ostream &, const GradingTone &)
  *            OCIO::DynamicPropertyValue::AsGradingPrimary(dynProp);
  *        OCIO::GradingPrimary primary = primaryProp->getValue();
  *        primary.m_saturation += 0.1f;
- *        rgbCurveProp->setValue(primary);
+ *        primaryProp->setValue(primary);
  *    }
  *    if (cpuProcessor->hasDynamicProperty(OCIO::DYNAMIC_PROPERTY_GRADING_RGBCURVE))
  *    {
@@ -1056,6 +1070,13 @@ public:
     static const char * GetFormatNameByIndex(int index);
     /// Get the LUT reader extension at index, return empty string if an invalid index is specified.
     static const char * GetFormatExtensionByIndex(int index);
+    /// Returns true if the extension corresponds to a format supported by FileTransform.
+    /// The argument is case-insensitive, and a leading dot, if present, is ignored.
+    /// Note that FileTransform will attempt all format readers on a given file until it is
+    /// successful, even files that contain an unsupported extension or no extension.
+    /// However, this function is useful for applications that want to know which files are likely
+    /// to be LUT files, based on their extension.
+    static bool IsFormatExtensionSupported(const char * extension);
 
     FileTransform & operator=(const FileTransform &) = delete;
     /// Do not use (needed only for pybind11).

@@ -290,6 +290,20 @@ OCIO_ADD_TEST(FileTransform, format_by_index)
     ValidateFormatByIndex(formatRegistry, OCIO::FORMAT_CAPABILITY_READ);
 }
 
+OCIO_ADD_TEST(FileTransform, is_format_extension_supported)
+{
+    OCIO::FormatRegistry & formatRegistry = OCIO::FormatRegistry::GetInstance();
+    OCIO_CHECK_EQUAL(formatRegistry.isFormatExtensionSupported("foo"), false);
+    OCIO_CHECK_EQUAL(formatRegistry.isFormatExtensionSupported("bar"), false);
+    OCIO_CHECK_EQUAL(formatRegistry.isFormatExtensionSupported("."), false);
+    OCIO_CHECK_ASSERT(formatRegistry.isFormatExtensionSupported("cdl"));
+    OCIO_CHECK_ASSERT(formatRegistry.isFormatExtensionSupported(".cdl"));
+    OCIO_CHECK_ASSERT(formatRegistry.isFormatExtensionSupported("Cdl"));
+    OCIO_CHECK_ASSERT(formatRegistry.isFormatExtensionSupported(".Cdl"));
+    OCIO_CHECK_ASSERT(formatRegistry.isFormatExtensionSupported("3dl"));
+    OCIO_CHECK_ASSERT(formatRegistry.isFormatExtensionSupported(".3dl"));
+}
+
 OCIO_ADD_TEST(FileTransform, validate)
 {
     OCIO::FileTransformRcPtr tr = OCIO::FileTransform::Create();
@@ -482,5 +496,76 @@ OCIO_ADD_TEST(FileTransform, context_variables)
             OCIO_CHECK_EQUAL(std::string("cc"), usedContextVars->getStringVarByIndex(0));
             OCIO_CHECK_EQUAL(std::string("CCNUM"), usedContextVars->getStringVarNameByIndex(1));
             OCIO_CHECK_EQUAL(std::string("01"), usedContextVars->getStringVarByIndex(1));
+    }
+}
+
+OCIO_ADD_TEST(FileTransform, cc_file_with_different_file_extension)
+{
+    static const std::string BASE_CONFIG = 
+    "ocio_profile_version: 1\n"
+    "description: Minimal\n"
+    "search_path: " + OCIO::GetTestFilesDir() + "\n"
+    "\n"
+    "roles:\n"
+    "  default: basic\n"
+    "  scene_linear: basic\n"
+    "  data: basic\n"
+    "  reference: basic\n"
+    "  compositing_log: basic\n"
+    "  color_timing: basic\n"
+    "  color_picking: basic\n"
+    "  texture_paint: basic\n"
+    "  matte_paint: basic\n"
+    "  rendering: basic\n"
+    "  aces_interchange: basic\n"
+    "  cie_xyz_d65_interchange: basic\n"
+    "\n"
+    "displays:\n"
+    "  display:\n"
+    "    - !<View> {name: basic, colorspace: basic }\n"
+    "    - !<View> {name: cdl, colorspace: basic_cdl }\n"
+    "\n"
+    "colorspaces:\n"
+    "  - !<ColorSpace>\n"
+    "    name: basic\n"
+    "\n"
+    "  - !<ColorSpace>\n"
+    "    name: basic_cdl\n";
+
+    {
+        static const std::string CONFIG = BASE_CONFIG +
+        "    from_reference: !<FileTransform> { src: cdl_test_cc_file_with_extension.cdl }\n";
+        std::istringstream iss;
+        iss.str(CONFIG);
+
+        OCIO::ConstConfigRcPtr cfg;
+        OCIO_CHECK_NO_THROW(cfg = OCIO::Config::CreateFromStream(iss));
+        OCIO_CHECK_NO_THROW(cfg->validate());
+
+
+        OCIO::ConstTransformRcPtr tr1 = cfg->getColorSpace("basic_cdl")->getTransform(
+            OCIO::COLORSPACE_DIR_FROM_REFERENCE
+        );
+        OCIO::ConstFileTransformRcPtr fTr1 = OCIO::DynamicPtrCast<const OCIO::FileTransform>(tr1);
+        OCIO_CHECK_ASSERT(fTr1);
+        OCIO_CHECK_NO_THROW(cfg->getProcessor(tr1));
+    }
+    {
+        static const std::string CONFIG = BASE_CONFIG +
+        "    from_reference: !<FileTransform> { src: cdl_test_cc_file_with_extension.ccc }\n";
+        std::istringstream iss;
+        iss.str(CONFIG);
+
+        OCIO::ConstConfigRcPtr cfg;
+        OCIO_CHECK_NO_THROW(cfg = OCIO::Config::CreateFromStream(iss));
+        OCIO_CHECK_NO_THROW(cfg->validate());
+
+
+        OCIO::ConstTransformRcPtr tr2 = cfg->getColorSpace("basic_cdl")->getTransform(
+            OCIO::COLORSPACE_DIR_FROM_REFERENCE
+        );
+        OCIO::ConstFileTransformRcPtr fTr2 = OCIO::DynamicPtrCast<const OCIO::FileTransform>(tr2);
+        OCIO_CHECK_ASSERT(fTr2);
+        OCIO_CHECK_NO_THROW(cfg->getProcessor(tr2));
     }
 }

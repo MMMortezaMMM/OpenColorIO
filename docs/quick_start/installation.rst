@@ -24,9 +24,10 @@ Alternatives
 Python
 ++++++
 
-If you only need the Python binding, the simplest solution is to take advantage of the pre-built 
-wheels in the Python Package Index (PyPI) `here <https://pypi.org/project/opencolorio>`_. It 
-can be installed as follows, once you have Python installed.
+If you only need the Python binding and command-line tools, the simplest solution is to 
+take advantage of the pre-built wheels in the Python Package Index (PyPI) 
+`here <https://pypi.org/project/opencolorio>`_. It can be installed as follows, once you 
+have Python installed.
 
 **PyPI**::
 
@@ -122,10 +123,10 @@ items manually:
 Required components:
 
 - C++ 11-17 compiler (gcc, clang, msvc)
-- CMake >= 3.13
+- CMake >= 3.14
 - \*Expat >= 2.4.1 (XML parser for CDL/CLF/CTF)
 - \*yaml-cpp >= 0.7.0 (YAML parser for Configs)
-- \*Imath >= 3.0 (for half domain LUTs)
+- \*Imath >= 3.1.1 (for half domain LUTs)
 - \*pystring >= 1.1.3
 - \*minizip-ng >= 3.0.7 (for config archiving)
 - \*ZLIB >= 1.2.13 (for config archiving)
@@ -134,14 +135,14 @@ Optional OCIO functionality also depends on:
 
 - \*Little CMS >= 2.2 (for ociobakelut ICC profile baking)
 - \*OpenGL GLUT & GLEW (for ociodisplay)
-- \*OpenEXR >= 3.0 (for apps including ocioconvert)
-- OpenImageIO >= 2.1.9 (for apps including ocioconvert)
+- \*OpenEXR >= 3.0.5 (for apps including ocioconvert)
+- OpenImageIO >= 2.2.14 (for apps including ocioconvert)
 - \*OpenFX >= 1.4 (for the OpenFX plug-ins)
 - OpenShadingLanguage >= 1.11 (for the OSL unit tests)
 - Doxygen (for the docs)
 - NumPy (optionally used in the Python test suite)
 - \*pybind11 >= 2.9.2 (for the Python binding)
-- Python >= 2.7 (for the Python binding only)
+- Python >= 3.7 (for the Python binding only)
 - Python 3.7 - 3.9 (for building the documentation)
 
 Building the documentation requires the following packages, available via PyPI:
@@ -187,10 +188,26 @@ Three ``OCIO_INSTALL_EXT_PACKAGES`` options are available::
 Existing Install Hints
 ++++++++++++++++++++++
 
-When using libraries already on your system, the CMake variable 
-``-D <Package Name>_ROOT=<Path>`` may be used to specify the path to the include and 
-library root directory rather than have CMake try to find it.  The package names used 
-by OCIO are as follows (note that these are case-sensitive):
+If the library is not installed in a typical location where CMake will find it, 
+you may specify the location using one of the following methods:
+
+- Set ``-D<package_name>_DIR`` to point to the directory containing the CMake configuration file for the package.
+
+- Set ``-D<package_name>_ROOT`` to point to the directory containing the lib and include directories.
+
+- Set ``-D<package_name>_LIBRARY`` and ``-D<package_name>_INCLUDE_DIR`` to point to the lib and include directories.
+
+Not all packages support all of the above options. Please refer the 
+OCIO CMake `find modules <https://github.com/AcademySoftwareFoundation/OpenColorIO/tree/main/share/cmake/modules>`_  for the package that you are having trouble with to see the options it supports.
+
+Usually CMake will use the dynamic library rather than static, if both are present. In this case, 
+you may set <package_name>_STATIC_LIBRARY to ON to request use of the static one. If only the 
+static library is present (such as when OCIO builds the dependency), then the option is not needed.
+The following packages support this option:
+``expat``, ``yaml-cpp``, ``Imath``, ``lcms2``, and ``minizip-ng``. Using CMake 3.24+, it is
+possible to prefer the static version of ``ZLIB`` with ``-DZLIB_USE_STATIC_LIBS=ON``.
+
+The package names used by OCIO are as follows (note that these are case-sensitive):
 
 Required:
 
@@ -214,21 +231,6 @@ Optional:
 - ``GLUT``
 - ``Python``
 
-There are scenarios in which some of the dependencies may not be compiled into an 
-OCIO dynamic library.  This is more likely when OCIO does not download the packages
-itself.  In these cases, it may be helpful to additionally specify the CMake variable
-``-D <Package Name>_STATIC_LIBRARY=ON``. The following package names support this hint:
-``expat``, ``yaml-cpp``, ``Imath``, ``lcms2``, ``ZLIB``, and ``minizip-ng``.
-
-Rather than using ``_ROOT``, and possibly ``_STATIC_LIBRARY``, you may instead use
-``-D <Package Name>_LIBRARY=<Path>`` and ``-D <Package Name>_INCLUDE_DIR=<Path>``.
-In this case, the library path will control whether a static or dynamic library is used.
-It may also be used to handle situations where the library and/or include files are not
-in the typical location relative to the root directory.
-
-The OCIO `CMake find modules <https://github.com/AcademySoftwareFoundation/OpenColorIO/tree/main/share/cmake/modules>`_ 
-may be consulted for more detail on the handling of a given package and the CMake
-variables it uses.
 
 Please note that if you provide your own ``minizip-ng``, rather than having OCIO's CMake
 download and build it, you will likely need to set its CMake variables the same way
@@ -263,6 +265,7 @@ CMake Options
 +++++++++++++
 
 There are many options available in `CMake. 
+
 <https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#guide:User%20Interaction%20Guide>`_
 
 Several of the most common ones are:
@@ -276,13 +279,32 @@ Here are the most common OCIO-specific CMake options (the default values are sho
 - ``-DOCIO_USE_OIIO_FOR_APPS=OFF`` (Set ON to build tools with OpenImageIO rather than OpenEXR)
 - ``-DOCIO_BUILD_PYTHON=ON`` (Set to OFF to not build the Python binding)
 - ``-DOCIO_BUILD_OPENFX=OFF`` (Set to ON to build the OpenFX plug-ins)
-- ``-DOCIO_USE_SSE=ON`` (Set to OFF to turn off SSE CPU performance optimizations)
+- ``-DOCIO_USE_SIMD=ON`` (Set to OFF to turn off SIMD CPU performance optimizations, such as SSE and NEON)
+- ``-DOCIO_USE_SSE2`` (Set to OFF to turn off SSE2 CPU performance optimizations)
+- ``-DOCIO_USE_AVX`` (Set to OFF to turn off AVX CPU performance optimizations)
+- ``-DOCIO_USE_AVX2`` (Set to OFF to turn off AVX2 CPU performance optimizations)
+- ``-DOCIO_USE_F16C`` (Set to OFF to turn off F16C CPU performance optimizations)
 - ``-DOCIO_BUILD_TESTS=ON`` (Set to OFF to not build the unit tests)
 - ``-DOCIO_BUILD_GPU_TESTS=ON`` (Set to OFF to not build the GPU unit tests)
-- ``-DOCIO_USE_HEADLESS=OFF`` (Set to ON to do headless GPU reendering)
+- ``-DOCIO_USE_HEADLESS=OFF`` (Set to ON to do headless GPU rendering)
 - ``-DOCIO_WARNING_AS_ERROR=ON`` (Set to OFF to turn off warnings as errors)
 - ``-DOCIO_BUILD_DOCS=OFF`` (Set to ON to build the documentation)
 - ``-DOCIO_BUILD_FROZEN_DOCS=OFF`` (Set to ON to update the Python documentation)
+
+Note that OCIO will turn off any specific SIMD CPU performance optimizations if they are not supported 
+by the build target architecture. The default for ``OCIO_USE_SSE2``, ``OCIO_USE_AVX``, ``OCIO_USE_AVX2`` and 
+``OCIO_USE_F16C`` depends on the architecture, but will be ON where supported.
+
+On MacOS, the default is to build for the native architecture that CMake is running under.
+For example, if a x86_64 version of CMake is running under Rosetta, the native architecture will 
+be x86_64, rather then arm64. You can use the ``CMAKE_OSX_ARCHITECTURES`` option to override that.
+To build universal binaries, use the following option: ``-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"``. 
+
+When doing a universal build, note that the OCIO dependencies must be built as universal libraries 
+too. If you are running in OCIO_INSTALL_EXT_PACKAGES=MISSING or NONE mode, your build will fail if 
+any of your installed libraries are not universal. The easiest way to address this is to set 
+OCIO_INSTALL_EXT_PACKAGES=ALL in order to let OCIO build everything. Alternatively, you may set 
+CMAKE_OSX_ARCHITECTURES to just the platform you are targeting.
 
 Several command-line tools (such as ``ocioconvert``) require reading or writing image files.
 If ``OCIO_USE_OIIO_FOR_APPS=OFF``, these will be built using OpenEXR rather than OpenImageIO
@@ -384,7 +406,7 @@ Windows
 While build environments may vary between users, the recommended way to build OCIO from source on 
 Windows 7 or newer is to use the scripts provided in the Windows 
 `share <https://github.com/AcademySoftwareFoundation/OpenColorIO/tree/main/share/dev/windows>`_ 
-section of the OCIO repository. There are two scripts currently available. 
+section of the OCIO repository. There are two scripts currently available.
 
 The first script is called 
 `ocio_deps.bat <https://github.com/AcademySoftwareFoundation/OpenColorIO/tree/main/share/dev/windows/ocio_deps.bat>`_ 
@@ -396,14 +418,18 @@ and it provides some automation to install the most difficult dependencies. Thos
 - Glew
 - Python dependencies for documentation
 
-Run this command to execute the ocio_deps.bat script::
+Run this command to execute the ocio_deps.bat script:
 
+.. code-block:: bash
+    
     ocio_deps.bat --vcpkg <path to current vcpkg installation or where it should be installed>
 
 The second script is called 
 `ocio.bat <https://github.com/AcademySoftwareFoundation/OpenColorIO/tree/main/share/dev/windows/ocio.bat>`_ 
 and it provide a way to configure and build OCIO from source. Moreover, this script executes the 
-install step of ``cmake`` as well as the unit tests. The main use case is the following::
+install step of ``cmake`` as well as the unit tests. The main use case is the following:
+
+.. code-block:: bash
 
     ocio.bat --b <path to build folder> --i <path to install folder> 
     --vcpkg <path to vcpkg installation> --ocio <path to ocio repository> --type Release
@@ -422,14 +448,26 @@ Quick environment configuration
 
 The quickest way to set the required :ref:`environment-setup` is to
 source the ``share/ocio/setup_ocio.sh`` script installed with OCIO.
-On Windows, use the corresponding setup_ocio.bat file.
+On Windows, use the corresponding setup_ocio.bat file. See OCIO's install directory under 
+share/ocio.
 
-For a simple single-user setup, add the following to ``~/.bashrc``
+For a temporary configuration of your terminal, you can run the following script:
+
+.. code-block:: bash
+
+   # Windows - Execute setup_ocio.bat
+   [... path to OCIO install directory]/share/ocio/setup_ocio.bat
+   # Unix - Execute setup_ocio.sh
+   [... path to OCIO install directory]\share\ocio\setup_ocio.sh
+
+For a more permanent option, add the following to ``~/.bashrc``
 (assuming you are using bash, and the example install directory of
-``/software/ocio``)::
+``/software/ocio``):
 
-    source /software/ocio/share/ocio/setup_ocio.sh
+.. code-block:: bash
 
+   source /software/ocio/share/ocio/setup_ocio.sh
+    
 The only environment variable you must configure manually is
 :envvar:`OCIO`, which points to the configuration file you wish to
 use. For prebuilt config files, see the

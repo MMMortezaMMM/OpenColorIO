@@ -71,10 +71,14 @@ OCIO_ADD_TEST(NamedTransform, alias)
     constexpr char AliasB[]{ "aliasB" };
     nt->addAlias(AliasA);
     OCIO_CHECK_EQUAL(nt->getNumAliases(), 1);
+    OCIO_CHECK_ASSERT(nt->hasAlias(AliasA));
+    OCIO_CHECK_ASSERT(nt->hasAlias(AliasAAlt));
+    OCIO_CHECK_ASSERT(!nt->hasAlias(AliasB));
     nt->addAlias(AliasB);
     OCIO_CHECK_EQUAL(nt->getNumAliases(), 2);
     OCIO_CHECK_EQUAL(std::string(nt->getAlias(0)), AliasA);
     OCIO_CHECK_EQUAL(std::string(nt->getAlias(1)), AliasB);
+    OCIO_CHECK_ASSERT(nt->hasAlias(AliasB));
 
     // Alias with same name (different case) already exists, do nothing.
     {
@@ -89,6 +93,8 @@ OCIO_ADD_TEST(NamedTransform, alias)
         nt->removeAlias(AliasAAlt);
         OCIO_CHECK_EQUAL(nt->getNumAliases(), 1);
         OCIO_CHECK_EQUAL(std::string(nt->getAlias(0)), AliasB);
+        OCIO_CHECK_ASSERT(!nt->hasAlias(AliasA));
+        OCIO_CHECK_ASSERT(!nt->hasAlias(AliasAAlt));
     }
 
     // Add with new case.
@@ -97,6 +103,8 @@ OCIO_ADD_TEST(NamedTransform, alias)
         OCIO_CHECK_EQUAL(nt->getNumAliases(), 2);
         OCIO_CHECK_EQUAL(std::string(nt->getAlias(0)), AliasB);
         OCIO_CHECK_EQUAL(std::string(nt->getAlias(1)), AliasAAlt);
+        OCIO_CHECK_ASSERT(nt->hasAlias(AliasA));
+        OCIO_CHECK_ASSERT(nt->hasAlias(AliasAAlt));
     }
 
     // Setting the name of the named transform to one of its aliases removes the alias.
@@ -105,6 +113,8 @@ OCIO_ADD_TEST(NamedTransform, alias)
         OCIO_CHECK_EQUAL(std::string(nt->getName()), AliasA);
         OCIO_CHECK_EQUAL(nt->getNumAliases(), 1);
         OCIO_CHECK_EQUAL(std::string(nt->getAlias(0)), AliasB);
+        OCIO_CHECK_ASSERT(!nt->hasAlias(AliasA));
+        OCIO_CHECK_ASSERT(!nt->hasAlias(AliasAAlt));
     }
 
     // Alias is not added if it is already the named transform name.
@@ -113,14 +123,18 @@ OCIO_ADD_TEST(NamedTransform, alias)
         OCIO_CHECK_EQUAL(std::string(nt->getName()), AliasA);
         OCIO_CHECK_EQUAL(nt->getNumAliases(), 1);
         OCIO_CHECK_EQUAL(std::string(nt->getAlias(0)), AliasB);
+        OCIO_CHECK_ASSERT(!nt->hasAlias(AliasAAlt));
     }
 
     // Remove all aliases.
     {
         nt->addAlias("other");
         OCIO_CHECK_EQUAL(nt->getNumAliases(), 2);
+        OCIO_CHECK_ASSERT(nt->hasAlias("other"));
         nt->clearAliases();
         OCIO_CHECK_EQUAL(nt->getNumAliases(), 0);
+        OCIO_CHECK_ASSERT(!nt->hasAlias(AliasB));
+        OCIO_CHECK_ASSERT(!nt->hasAlias("other"));
     }
 
     //
@@ -1216,6 +1230,72 @@ colorspaces:
     }
 }
 
+OCIO_ADD_TEST(Config, colorspace_transform_named_transform)
+{
+    // Validate Config::validate() on config with ColorSpace or DisplayView Transforms,
+    // or ViewTransforms that reference a Named Transform.
+
+    constexpr const char * OCIO_CONFIG{ R"(
+ocio_profile_version: 2
+
+file_rules:
+  - !<Rule> {name: Default, colorspace: raw}
+
+displays:
+  sRGB:
+    - !<View> {name: Raw, colorspace: raw}
+  Rec.2100-PQ - Display:
+    - !<View> {name: test_view, view_transform: vt, display_colorspace: Rec.2100-PQ - Display}
+
+view_transforms:
+  - !<ViewTransform>
+    name: vt
+    from_scene_reference: !<ColorSpaceTransform> {src: nt, dst: cs2}
+
+display_colorspaces:
+  - !<ColorSpace>
+    name: Rec.2100-PQ - Display
+    isdata: false
+    from_display_reference: !<BuiltinTransform> {style: DISPLAY - CIE-XYZ-D65_to_REC.2100-PQ}
+
+colorspaces:
+  - !<ColorSpace>
+    name: raw
+    isdata: true
+
+  - !<ColorSpace>
+    name: cs2
+    isdata: false
+    from_scene_reference: !<MatrixTransform> {matrix: [ 2.041587903811, -0.565006974279, -0.344731350778, 0, -0.969243636281, 1.875967501508, 0.041555057407, 0, 0.013444280632, -0.118362392231, 1.015174994391, 0, 0, 0, 0, 1 ]}
+
+  - !<ColorSpace>
+    name: cs3
+    isdata: false
+    from_scene_reference: !<ColorSpaceTransform> {src: nt_alias, dst: cs2}
+
+  - !<ColorSpace>
+    name: cs4
+    isdata: false
+    from_scene_reference: !<DisplayViewTransform> {src: nt_alias, display: Rec.2100-PQ - Display, view: test_view}
+
+named_transforms:
+  - !<NamedTransform>
+    name: nt
+    aliases: [nt_alias]
+    transform: !<GroupTransform>
+      children:
+        - !<MatrixTransform> {matrix: [1.49086870465701, -0.268712979082956, -0.222155725704626, 0, -0.0792372106028327, 1.1793685831111, -0.100131372460806, 0, 0.00277810076707935, -0.0304336146315336, 1.02765551391237, 0, 0, 0, 0, 1]}
+)" };
+
+    const std::string configStr = std::string(OCIO_CONFIG);
+
+    std::istringstream is;
+    is.str(configStr);
+
+    OCIO::ConstConfigRcPtr config;
+    OCIO_CHECK_NO_THROW(config = OCIO::Config::CreateFromStream(is));
+    OCIO_CHECK_NO_THROW(config->validate());
+}
 
 namespace
 {

@@ -8,6 +8,51 @@
 set(PLATFORM_COMPILE_OPTIONS "")
 set(PLATFORM_LINK_OPTIONS "")
 
+###############################################################################
+# Verify SIMD compatibility
+
+if(OCIO_USE_SIMD)
+    if (OCIO_ARCH_X86)
+        include(CheckSupportX86SIMD)
+    endif()
+
+    if (OCIO_USE_SSE2NEON AND COMPILER_SUPPORTS_ARM_NEON)
+        include(CheckSupportSSEUsingSSE2NEON)
+        if(COMPILER_SUPPORTS_SSE_WITH_SSE2NEON)
+            if(WIN32 AND MSVC)
+                # Enable the "new" preprocessor, to more closely match Clang/GCC, required for sse2neon
+                set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/Zc:preprocessor")
+            endif()
+        else()
+            set(OCIO_USE_SSE2NEON OFF)
+        endif()
+    endif()
+else()
+    set(OCIO_USE_SSE2 OFF)
+    set(OCIO_USE_SSE3 OFF)
+    set(OCIO_USE_SSSE3 OFF)
+    set(OCIO_USE_SSE4 OFF)
+    set(OCIO_USE_SSE42 OFF)
+    set(OCIO_USE_AVX OFF)
+    set(OCIO_USE_AVX2 OFF)
+    set(OCIO_USE_AVX512 OFF)
+    set(OCIO_USE_F16C OFF)
+
+    set(OCIO_USE_SSE2NEON OFF)
+endif()
+
+if (NOT COMPILER_SUPPORTS_SSE2 AND NOT COMPILER_SUPPORTS_SSE_WITH_SSE2NEON AND
+    NOT COMPILER_SUPPORTS_SSE3 AND NOT COMPILER_SUPPORTS_SSSE3 AND
+    NOT COMPILER_SUPPORTS_SSE4 AND NOT COMPILER_SUPPORTS_SSE42 AND
+    NOT COMPILER_SUPPORTS_AVX AND NOT COMPILER_SUPPORTS_AVX2 AND NOT COMPILER_SUPPORTS_AVX512 AND
+    NOT COMPILER_SUPPORTS_F16C)
+    message(STATUS "Disabling SIMD optimizations, as the target doesn't support them")
+    set(OCIO_USE_SIMD OFF)
+endif()
+
+###############################################################################
+# Compile flags
+
 if(USE_MSVC)
 
     set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/DUSE_MSVC")
@@ -22,6 +67,9 @@ if(USE_MSVC)
         )
     endif()
 
+    # Make MSVC compiler report correct __cplusplus version (otherwise reports 199711L)
+    set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/Zc:__cplusplus")
+
     # Explicitely specify the default warning level i.e. /W3.
     # Note: Do not use /Wall (i.e. /W4) which adds 'informational' warnings.
     set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/W3")
@@ -34,13 +82,15 @@ if(USE_MSVC)
         set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/WX")
     endif()
 
+    # Enable parallel compilation of source files
+    set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};/MP")
+
 elseif(USE_CLANG)
 
     set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};-DUSE_CLANG")
 
     # Use of 'register' specifier must be removed for C++17 support.
     set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};-Wno-deprecated-register")
-
 elseif(USE_GCC)
 
     set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};-DUSE_GCC")
@@ -68,8 +118,8 @@ if(USE_GCC OR USE_CLANG)
     endif()
 
     if(OCIO_ENABLE_SANITIZER)
-        set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};-fno-omit-frame-pointer;-fsanitize=address")
-        set(PLATFORM_LINK_OPTIONS "${PLATFORM_LINK_OPTIONS};-fsanitize=address")
+        set(PLATFORM_COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS};-fno-omit-frame-pointer;-fsanitize=address;-fsanitize=undefined")
+        set(PLATFORM_LINK_OPTIONS "${PLATFORM_LINK_OPTIONS};-fsanitize=address;-fsanitize=undefined")
     endif()
 
 endif()
@@ -91,20 +141,9 @@ set_unless_defined(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
 
 
 ###############################################################################
-# Define if SSE2 can be used.
-
-include(CheckSupportSSE2)
-
-if(NOT HAVE_SSE2)
-    message(STATUS "Disabling SSE optimizations, as the target doesn't support them")
-    set(OCIO_USE_SSE OFF)
-endif(NOT HAVE_SSE2)
-
-
-###############################################################################
 # Define RPATH.
 
-if (UNIX AND NOT CMAKE_SKIP_RPATH)
+if (UNIX AND NOT CMAKE_SKIP_RPATH AND NOT CMAKE_INSTALL_RPATH)
     # With the 'usual' install path structure in mind, search from the bin directory
     # (i.e. a binary loading a dynamic library) and then from the current directory
     # (i.e. dynamic library loading another dynamic library).  

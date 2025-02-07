@@ -449,11 +449,14 @@ enum GpuLanguage
     GPU_LANGUAGE_GLSL_1_2,          ///< OpenGL Shading Language
     GPU_LANGUAGE_GLSL_1_3,          ///< OpenGL Shading Language
     GPU_LANGUAGE_GLSL_4_0,          ///< OpenGL Shading Language
-    GPU_LANGUAGE_HLSL_DX11,         ///< DirectX Shading Language
+    GPU_LANGUAGE_HLSL_SM_5_0,       ///< DirectX High Level Shading Language
     LANGUAGE_OSL_1,                 ///< Open Shading Language
     GPU_LANGUAGE_GLSL_ES_1_0,       ///< OpenGL ES Shading Language
     GPU_LANGUAGE_GLSL_ES_3_0,       ///< OpenGL ES Shading Language
-    GPU_LANGUAGE_MSL_2_0            ///< Metal Shading Language
+    GPU_LANGUAGE_MSL_2_0,           ///< Metal Shading Language
+
+    // Deprecated enum(s)
+    GPU_LANGUAGE_HLSL_DX11 = GPU_LANGUAGE_HLSL_SM_5_0
 };
 
 /// Controls which environment variables are loaded into a Context object.
@@ -474,19 +477,26 @@ enum RangeStyle
 /// Enumeration of the :cpp:class:`FixedFunctionTransform` transform algorithms.
 enum FixedFunctionStyle
 {
-    FIXED_FUNCTION_ACES_RED_MOD_03 = 0, ///< Red modifier (ACES 0.3/0.7)
-    FIXED_FUNCTION_ACES_RED_MOD_10,     ///< Red modifier (ACES 1.0)
-    FIXED_FUNCTION_ACES_GLOW_03,        ///< Glow function (ACES 0.3/0.7)
-    FIXED_FUNCTION_ACES_GLOW_10,        ///< Glow function (ACES 1.0)
-    FIXED_FUNCTION_ACES_DARK_TO_DIM_10, ///< Dark to dim surround correction (ACES 1.0)
-    FIXED_FUNCTION_REC2100_SURROUND,    ///< Rec.2100 surround correction (takes one double for the gamma param)
-    FIXED_FUNCTION_RGB_TO_HSV,          ///< Classic RGB to HSV function
-    FIXED_FUNCTION_XYZ_TO_xyY,          ///< CIE XYZ to 1931 xy chromaticity coordinates
-    FIXED_FUNCTION_XYZ_TO_uvY,          ///< CIE XYZ to 1976 u'v' chromaticity coordinates
-    FIXED_FUNCTION_XYZ_TO_LUV,          ///< CIE XYZ to 1976 CIELUV colour space (D65 white)
-    FIXED_FUNCTION_ACES_GAMUTMAP_02,    ///< ACES 0.2 Gamut clamping algorithm -- NOT IMPLEMENTED YET
-    FIXED_FUNCTION_ACES_GAMUTMAP_07,    ///< ACES 0.7 Gamut clamping algorithm -- NOT IMPLEMENTED YET
-    FIXED_FUNCTION_ACES_GAMUT_COMP_13   ///< ACES 1.3 Parametric Gamut Compression (expects ACEScg values)
+    FIXED_FUNCTION_ACES_RED_MOD_03 = 0,         ///< Red modifier (ACES 0.3/0.7)
+    FIXED_FUNCTION_ACES_RED_MOD_10,             ///< Red modifier (ACES 1.0)
+    FIXED_FUNCTION_ACES_GLOW_03,                ///< Glow function (ACES 0.3/0.7)
+    FIXED_FUNCTION_ACES_GLOW_10,                ///< Glow function (ACES 1.0)
+    FIXED_FUNCTION_ACES_DARK_TO_DIM_10,         ///< Dark to dim surround correction (ACES 1.0)
+    FIXED_FUNCTION_REC2100_SURROUND,            ///< Rec.2100 surround correction (takes one double for the gamma param)
+    FIXED_FUNCTION_RGB_TO_HSV,                  ///< Classic RGB to HSV function
+    FIXED_FUNCTION_XYZ_TO_xyY,                  ///< CIE XYZ to 1931 xy chromaticity coordinates
+    FIXED_FUNCTION_XYZ_TO_uvY,                  ///< CIE XYZ to 1976 u'v' chromaticity coordinates
+    FIXED_FUNCTION_XYZ_TO_LUV,                  ///< CIE XYZ to 1976 CIELUV colour space (D65 white)
+    FIXED_FUNCTION_ACES_GAMUTMAP_02,            ///< ACES 0.2 Gamut clamping algorithm -- NOT IMPLEMENTED YET
+    FIXED_FUNCTION_ACES_GAMUTMAP_07,            ///< ACES 0.7 Gamut clamping algorithm -- NOT IMPLEMENTED YET
+    FIXED_FUNCTION_ACES_GAMUT_COMP_13,          ///< ACES 1.3 Parametric Gamut Compression (expects ACEScg values)
+    FIXED_FUNCTION_LIN_TO_PQ,                   ///< SMPTE ST-2084 OETF, scaled with 100 nits at 1.0 (neg vals mirrored)
+    FIXED_FUNCTION_LIN_TO_GAMMA_LOG,            ///< Parametrized gamma and log segments with mirroring
+    FIXED_FUNCTION_LIN_TO_DOUBLE_LOG,           ///< Two parameterized LogAffineTransforms with a middle linear segment
+    FIXED_FUNCTION_ACES_OUTPUT_TRANSFORM_20,    ///< ACES 2.0 Display Rendering -- EXPERIMENTAL
+    FIXED_FUNCTION_ACES_RGB_TO_JMH_20,          ///< ACES 2.0 RGB to JMh -- EXPERIMENTAL
+    FIXED_FUNCTION_ACES_TONESCALE_COMPRESS_20,  ///< ACES 2.0 Tonescale and chroma compression -- EXPERIMENTAL
+    FIXED_FUNCTION_ACES_GAMUT_COMPRESS_20       ///< ACES 2.0 Gamut compression -- EXPERIMENTAL
 };
 
 /// Enumeration of the :cpp:class:`ExposureContrastTransform` transform algorithms.
@@ -726,8 +736,7 @@ extern OCIOEXPORT ExposureContrastStyle ExposureContrastStyleFromString(const ch
 extern OCIOEXPORT const char * NegativeStyleToString(NegativeStyle style);
 extern OCIOEXPORT NegativeStyle NegativeStyleFromString(const char * style);
 
-/** \defgroup Env. variables.
- *  @{
+/** Env. variables.
  *
  * These environmental variables are used by the OpenColorIO library.
  * For variables that allow specifying more than one token, they should be separated by commas.
@@ -761,7 +770,7 @@ extern OCIOEXPORT const char * OCIO_INACTIVE_COLORSPACES_ENVVAR;
  * The envvar 'OCIO_OPTIMIZATION_FLAGS' provides a way to force a given optimization level.
  * Remove the variable or set the value to empty to not use it. Set the value of the variable
  * to the desired optimization level as either an integer or hexadecimal value.
- * Ex: OCIO_OPTIMIZATION_FLAGS="20479" or "0x4FFF" for OPTIMIZATION_LOSSLESS.
+ * Ex: OCIO_OPTIMIZATION_FLAGS="144457667" or "0x89c3fc3" for OPTIMIZATION_LOSSLESS.
  */
 extern OCIOEXPORT const char * OCIO_OPTIMIZATION_FLAGS_ENVVAR;
 
@@ -775,12 +784,6 @@ extern OCIOEXPORT const char * OCIO_OPTIMIZATION_FLAGS_ENVVAR;
  * spaces. The categories will be ignored if they would result in no color spaces being found.
  */
 extern OCIOEXPORT const char * OCIO_USER_CATEGORIES_ENVVAR;
-
-/** @}*/
-
-/** \defgroup VarsRoles
- *  @{
- */
 
 // TODO: Move to .rst
 /*!rst::
@@ -852,12 +855,6 @@ extern OCIOEXPORT const char * ROLE_INTERCHANGE_SCENE;
  */
 extern OCIOEXPORT const char * ROLE_INTERCHANGE_DISPLAY;
 
-/** @}*/
-
-/** \defgroup VarsSharedView
- *  @{
- */
-
 /*!rst::
 Shared View
 ***********
@@ -869,12 +866,6 @@ Shared View
  * has the same name as the display the shared view is used by.
  */
 extern OCIOEXPORT const char * OCIO_VIEW_USE_DISPLAY_NAME;
-
-/** @}*/
-
-/** \defgroup VarsFormatMetadata
- *  @{
- */
 
 // TODO: Move to .rst
 /*!rst::
@@ -929,12 +920,6 @@ extern OCIOEXPORT const char * METADATA_NAME;
  */
 extern OCIOEXPORT const char * METADATA_ID;
 
-/** @}*/
-
-/** \defgroup VarsCaches
- *  @{
- */
-
 /*!rst::
 Caches
 ******
@@ -963,14 +948,16 @@ extern OCIOEXPORT const char * OCIO_DISABLE_PROCESSOR_CACHES;
 // variable to disable the fallback.
 extern OCIOEXPORT const char * OCIO_DISABLE_CACHE_FALLBACK;
 
-/** @}*/
-
 
 // Archive config feature
 // Default filename (with extension) of an config.
 extern OCIOEXPORT const char * OCIO_CONFIG_DEFAULT_NAME;
 extern OCIOEXPORT const char * OCIO_CONFIG_DEFAULT_FILE_EXT;
 extern OCIOEXPORT const char * OCIO_CONFIG_ARCHIVE_FILE_EXT;
+
+// Built-in config feature
+// URI Prefix
+extern OCIOEXPORT const char * OCIO_BUILTIN_URI_PREFIX;
 
 } // namespace OCIO_NAMESPACE
 

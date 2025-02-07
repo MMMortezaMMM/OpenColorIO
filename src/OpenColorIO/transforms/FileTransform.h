@@ -13,7 +13,6 @@
 #include "Op.h"
 #include "ops/noop/NoOps.h"
 #include "PrivateTypes.h"
-#include "Processor.h"
 #include "utils/StringUtils.h"
 
 
@@ -138,6 +137,7 @@ public:
     int getNumFormats(int capability) const noexcept;
     const char * getFormatNameByIndex(int capability, int index) const noexcept;
     const char * getFormatExtensionByIndex(int capability, int index) const noexcept;
+    bool isFormatExtensionSupported(const char * extension) const;
 private:
     FormatRegistry();
     ~FormatRegistry();

@@ -17,8 +17,10 @@ set(SOURCES
     ColorSpace.cpp
     ColorSpaceSet.cpp
     Config.cpp
+    ConfigUtils.cpp
     Context.cpp
     ContextVariableUtils.cpp
+    CPUInfo.cpp
     CPUProcessor.cpp
     Display.cpp
     DynamicProperty.cpp
@@ -82,6 +84,7 @@ set(SOURCES
     ops/exposurecontrast/ExposureContrastOpData.cpp
     ops/exposurecontrast/ExposureContrastOpGPU.cpp
     ops/exposurecontrast/ExposureContrastOp.cpp
+    ops/fixedfunction/ACES2/Transform.cpp
     ops/fixedfunction/FixedFunctionOpCPU.cpp
     ops/fixedfunction/FixedFunctionOpData.cpp
     ops/fixedfunction/FixedFunctionOpGPU.cpp
@@ -114,10 +117,18 @@ set(SOURCES
     ops/log/LogUtils.cpp
     ops/lut1d/Lut1DOp.cpp
     ops/lut1d/Lut1DOpCPU.cpp
+    ops/lut1d/Lut1DOpCPU_SSE2.cpp
+    ops/lut1d/Lut1DOpCPU_AVX.cpp
+    ops/lut1d/Lut1DOpCPU_AVX2.cpp
+    ops/lut1d/Lut1DOpCPU_AVX512.cpp
     ops/lut1d/Lut1DOpData.cpp
     ops/lut1d/Lut1DOpGPU.cpp
     ops/lut3d/Lut3DOp.cpp
     ops/lut3d/Lut3DOpCPU.cpp
+    ops/lut3d/Lut3DOpCPU_SSE2.cpp
+    ops/lut3d/Lut3DOpCPU_AVX.cpp
+    ops/lut3d/Lut3DOpCPU_AVX2.cpp
+    ops/lut3d/Lut3DOpCPU_AVX512.cpp
     ops/lut3d/Lut3DOpData.cpp
     ops/lut3d/Lut3DOpGPU.cpp
     ops/matrix/MatrixOpCPU.cpp
@@ -142,6 +153,7 @@ set(SOURCES
     transforms/builtins/BuiltinTransformRegistry.cpp
     transforms/builtins/ColorMatrixHelpers.cpp
     transforms/builtins/OpHelpers.cpp
+    transforms/builtins/AppleCameras.cpp
     transforms/builtins/ArriCameras.cpp
     transforms/builtins/CanonCameras.cpp
     transforms/builtins/Displays.cpp
@@ -198,6 +210,20 @@ endif()
 configure_file(res/OpenColorIO.pc.in ${CMAKE_CURRENT_BINARY_DIR}/OpenColorIO.pc @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/OpenColorIO.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
+if(OCIO_USE_SIMD AND (OCIO_ARCH_X86 OR OCIO_USE_SSE2NEON))
+    # Note that these files are gated by preprocessors to remove them based on the OCIO_USE_* vars.
+    set_property(SOURCE ops/lut1d/Lut1DOpCPU_SSE2.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_SSE2_ARGS})
+    set_property(SOURCE ops/lut1d/Lut1DOpCPU_AVX.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_AVX_ARGS})
+    set_property(SOURCE ops/lut1d/Lut1DOpCPU_AVX2.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_AVX2_ARGS})
+    set_property(SOURCE ops/lut1d/Lut1DOpCPU_AVX512.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_AVX512_ARGS})
+    set_property(SOURCE ops/lut3d/Lut3DOpCPU_SSE2.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_SSE2_ARGS})
+    set_property(SOURCE ops/lut3d/Lut3DOpCPU_AVX.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_AVX_ARGS})
+    set_property(SOURCE ops/lut3d/Lut3DOpCPU_AVX2.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_AVX2_ARGS})
+    set_property(SOURCE ops/lut3d/Lut3DOpCPU_AVX512.cpp APPEND PROPERTY COMPILE_OPTIONS ${OCIO_AVX512_ARGS})
+endif()
+
+configure_file(CPUInfoConfig.h.in CPUInfoConfig.h)
+
 add_library(OpenColorIO ${SOURCES})
 
 # Require at least a C++11 compatible compiler for consumer projects.
@@ -215,17 +241,17 @@ if(BUILD_SHARED_LIBS AND WIN32)
 endif()
 
 
-set(HEADER_LOCATION "${CMAKE_SOURCE_DIR}/include/OpenColorIO")
+set(HEADER_LOCATION "${PROJECT_SOURCE_DIR}/include/OpenColorIO")
 file(GLOB_RECURSE INSTALL_HEADERS "${HEADER_LOCATION}/*.h")
 
 # Some part of the build process expect to find the ABI header here,
 # notably the documentation.
-set(ABI_HEADER_LOCATION "${CMAKE_BINARY_DIR}/include/OpenColorIO")
+set(ABI_HEADER_LOCATION "${PROJECT_BINARY_DIR}/include/OpenColorIO")
 list(APPEND INSTALL_HEADERS ${ABI_HEADER_LOCATION}/OpenColorABI.h)
 configure_file("${HEADER_LOCATION}/OpenColorABI.h.in" "${ABI_HEADER_LOCATION}/OpenColorABI.h" @ONLY)
 
 # Built-in configs
-set(CONFIGS_HEADER_LOCATION "${CMAKE_BINARY_DIR}/generated_include")
+set(CONFIGS_HEADER_LOCATION "${PROJECT_BINARY_DIR}/generated_include")
 file(GLOB CONFIGS_PATHS "builtinconfigs/configs/*.ocio")
 # Loop through the .ocio config files.
 foreach(C ${CONFIGS_PATHS})
@@ -246,7 +272,7 @@ foreach(C ${CONFIGS_PATHS})
 
     # Append 0x00 to null-terminated the string.
     string(APPEND FORMATTED_HEX ",0x00")
-    
+
     # Set the dynamically named variable "${CONFIG_NAME}" to the config in HEX.
     set(${CONFIG_NAME} ${FORMATTED_HEX})
 endforeach()
@@ -269,6 +295,7 @@ set(BUILD_INCLUDES
     ${HEADER_LOCATION}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${ABI_HEADER_LOCATION}
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_include_directories(OpenColorIO
@@ -288,14 +315,20 @@ target_link_libraries(OpenColorIO
         "$<BUILD_INTERFACE:utils::from_chars>"
         "$<BUILD_INTERFACE:utils::strings>"
         "$<BUILD_INTERFACE:xxHash>"
-        yaml-cpp
+        ${YAML_CPP_LIBRARIES}
         MINIZIP::minizip-ng
 )
+
+if(OCIO_USE_SIMD AND OCIO_USE_SSE2NEON AND COMPILER_SUPPORTS_SSE_WITH_SSE2NEON)
+    target_link_libraries(OpenColorIO PRIVATE $<BUILD_INTERFACE:sse2neon>)
+endif()
 
 if(APPLE)
     target_link_libraries(OpenColorIO
         PRIVATE
-            "-framework Carbon"
+            "-framework ColorSync"
+            "-framework CoreFoundation"
+            "-framework CoreGraphics"
             "-framework IOKit"
     )
 endif()
@@ -320,13 +353,6 @@ if(BUILD_SHARED_LIBS OR (OCIO_BUILD_PYTHON AND UNIX))
     # If supported for the target machine, emit position-independent code
     # suitable for dynamic linking.
     set_property(TARGET OpenColorIO PROPERTY POSITION_INDEPENDENT_CODE ON)
-endif()
-
-if(OCIO_USE_SSE)
-    target_compile_definitions(OpenColorIO
-        PRIVATE
-            USE_SSE
-    )
 endif()
 
 if(MSVC AND BUILD_TYPE_DEBUG AND BUILD_SHARED_LIBS)
@@ -371,33 +397,38 @@ elseif(APPLE)
 
 
     # Check for minizip first since our Findminizip module sets minizip-ng_LIBRARY.
-    if (minizip_LIBRARY)
+    if (minizip_LIBRARY OR minizip-ng_COMPAT)
         get_filename_component(_minizip-ng_LIBDIR "${minizip_LIBRARY}" DIRECTORY)
         set(_minizip-ng_NAME "minizip")
     elseif(minizip-ng_LIBRARY)
         get_filename_component(_minizip-ng_LIBDIR "${minizip-ng_LIBRARY}" DIRECTORY)
-        set(_minizip-ng_NAME "minizip-ng")        
+        set(_minizip-ng_NAME "minizip-ng")
     endif()
 
     if (_minizip-ng_LIBDIR)
         # Add the path to CMake list of search paths for libraries.
         list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-L${_minizip-ng_LIBDIR}")
         # Hide the minizip-ng symbols.
-        list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-hidden-l${_minizip-ng_NAME}") 
-    endif()   
+        list(APPEND _OCIO_LINK_FLAGS_LIST_ "-Wl,-hidden-l${_minizip-ng_NAME}")
+    endif()
 
     if (_OCIO_LINK_FLAGS_LIST_)
         list(JOIN _OCIO_LINK_FLAGS_LIST_ ";" _OCIO_LINK_FLAGS_LIST_)
         set(CUSTOM_LINK_FLAGS "${CUSTOM_LINK_FLAGS};${_OCIO_LINK_FLAGS_LIST_}")
-    endif()              
+    endif()
+endif()
+
+if (OCIO_USE_SOVERSION)
+    set_target_properties(OpenColorIO PROPERTIES
+        VERSION       ${OpenColorIO_VERSION}
+        SOVERSION     ${SOVERSION}
+    )
 endif()
 
 set_target_properties(OpenColorIO PROPERTIES
     OUTPUT_NAME   ${PROJECT_NAME}${OCIO_LIBNAME_SUFFIX}
     COMPILE_OPTIONS "${PLATFORM_COMPILE_OPTIONS}"
     LINK_OPTIONS "${CUSTOM_LINK_FLAGS}"
-    VERSION       ${OpenColorIO_VERSION}
-    SOVERSION     ${SOVERSION}
     PUBLIC_HEADER "${INSTALL_HEADERS}"
 )
 

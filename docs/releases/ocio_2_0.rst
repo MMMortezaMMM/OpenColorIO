@@ -25,8 +25,8 @@ described below.  This is available in the configs section of the documentation
 as :ref:`ocio-v2_demo`.
 
 
-New Feature List
-================
+New Feature Guide
+=================
 
 New GPU Renderer
 ****************
@@ -657,3 +657,5 @@ For more detail, please see the GitHub release pages:
 `OCIO 2.0.3 <https://github.com/AcademySoftwareFoundation/OpenColorIO/releases/tag/v2.0.3>`_
 
 `OCIO 2.0.4 <https://github.com/AcademySoftwareFoundation/OpenColorIO/releases/tag/v2.0.4>`_
+
+`OCIO 2.0.5 <https://github.com/AcademySoftwareFoundation/OpenColorIO/releases/tag/v2.0.5>`_
